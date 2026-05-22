@@ -1,0 +1,12 @@
+{
+  "name": "sentinel-2fa-authenticator",
+  "version": "1.0.0",
+  "description": "Zero-knowledge persistent 2FA TOTP authenticator app",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
