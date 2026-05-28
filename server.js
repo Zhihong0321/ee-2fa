@@ -129,7 +129,13 @@ app.use(express.static(__dirname));
 app.get('/api/vault', (req, res) => {
   if (!fs.existsSync(storageFile)) return res.json({ encryptedData: null, plainAccounts: null });
   try {
-    return res.json(JSON.parse(fs.readFileSync(storageFile, 'utf8')));
+    const vault = JSON.parse(fs.readFileSync(storageFile, 'utf8'));
+    // Auto-decrypt on the server so the frontend never sees a lock screen
+    if (vault.encryptedData) {
+      const accounts = decryptVault(vault.encryptedData, ADMIN_PASSWORD);
+      if (accounts) return res.json({ encryptedData: null, plainAccounts: accounts });
+    }
+    return res.json(vault);
   } catch (e) {
     return res.status(500).json({ error: 'Failed to read vault.' });
   }
