@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Learning Hub — Sentinel 2FA</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .learn-container {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    /* ── Page header ── */
+    .learn-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.5rem 2rem;
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    }
+
+    .learn-header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .learn-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #a855f7, #7c3aed);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      box-shadow: 0 0 15px rgba(168,85,247,0.4);
+      flex-shrink: 0;
+    }
+
+    .learn-header-text h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      background: linear-gradient(to right, #fff, #9ca3af);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .learn-header-text p {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-top: 2px;
+    }
+
+    /* ── Section label ── */
+    .section-label {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0 0.25rem;
+    }
+
+    .section-label-text {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-secondary);
+    }
+
+    .section-label-line {
+      flex: 1;
+      height: 1px;
+      background: rgba(255,255,255,0.06);
+    }
+
+    /* ── Video card ── */
+    .video-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      overflow: hidden;
+      transition: var(--transition-smooth);
+      position: relative;
+    }
+
+    .video-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(to right, #a855f7, #7c3aed);
+      opacity: 0.4;
+      transition: var(--transition-smooth);
+    }
+
+    .video-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(168,85,247,0.35);
+      box-shadow: 0 12px 30px rgba(168,85,247,0.12);
+    }
+
+    .video-card:hover::before {
+      opacity: 1;
+    }
+
+    /* Number badge */
+    .video-number {
+      position: absolute;
+      top: 1rem;
+      left: 1rem;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: rgba(168,85,247,0.2);
+      border: 1px solid rgba(168,85,247,0.4);
+      color: #c084fc;
+      font-size: 0.78rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2;
+    }
+
+    /* Embed wrapper — 16:9 */
+    .video-embed-wrapper {
+      position: relative;
+      width: 100%;
+      padding-top: 56.25%; /* 16:9 */
+      background: #000;
+    }
+
+    .video-embed-wrapper iframe {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    /* Card body */
+    .video-body {
+      padding: 1.25rem 1.5rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .video-title {
+      font-size: 1rem;
+      font-weight: 600;
+      line-height: 1.45;
+      color: var(--text-primary);
+    }
+
+    .video-desc {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      line-height: 1.65;
+    }
+
+    .video-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 0.25rem;
+    }
+
+    .video-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: rgba(168,85,247,0.1);
+      border: 1px solid rgba(168,85,247,0.25);
+      color: #c084fc;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+    }
+
+    .video-yt-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: var(--transition-smooth);
+      padding: 0.3rem 0.7rem;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .video-yt-link:hover {
+      color: #ff4444;
+      border-color: rgba(255,68,68,0.3);
+      background: rgba(255,68,68,0.06);
+    }
+
+    /* ── Back link ── */
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: var(--transition-smooth);
+    }
+
+    .back-link:hover {
+      color: var(--text-primary);
+    }
+
+    @media (max-width: 600px) {
+      .learn-header { padding: 1rem; border-radius: 16px; }
+      .learn-header-text h1 { font-size: 1.2rem; }
+      .video-body { padding: 1rem; }
+      .video-title { font-size: 0.95rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="learn-container">
+
+    <!-- Header -->
+    <header class="learn-header">
+      <div class="learn-header-left">
+        <div class="learn-icon">🎓</div>
+        <div class="learn-header-text">
+          <h1>AI Learning Hub</h1>
+          <p>精选教程 · Selected Tutorials</p>
+        </div>
+      </div>
+      <a href="/" class="back-link">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+        </svg>
+        Back to Vault
+      </a>
+    </header>
+
+    <!-- Section label -->
+    <div class="section-label">
+      <span class="section-label-text">5 Videos · Gemini &amp; AI Tools</span>
+      <div class="section-label-line"></div>
+    </div>
+
+    <!-- ── Video 1 ── -->
+    <div class="video-card">
+      <div class="video-number">01</div>
+      <div class="video-embed-wrapper">
+        <iframe
+          src="https://www.youtube.com/embed/7KBMQ9u_yns"
+          title="Gemini网页版太难用啦❗️一款必装的Chrome套件，让你效率直接翻倍｜Voyager"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen
+          loading="lazy">
+        </iframe>
+      </div>
+      <div class="video-body">
+        <p class="video-title">Gemini网页版太难用啦❗️一款必装的Chrome套件，让你效率直接翻倍｜Voyager</p>
+        <p class="video-desc">介绍免费插件 Voyager，一键解决 Gemini 网页版对话杂乱、回看费劲等痛点，支持文件夹管理、时间线分类和对话批量导出。</p>
+        <div class="video-footer">
+          <span class="video-tag">
+            <svg width="10" height="10" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+            </svg>
+            Chrome 插件
+          </span>
+          <a href="https://www.youtube.com/watch?v=7KBMQ9u_yns" target="_blank" rel="noopener" class="video-yt-link">
+            <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+            </svg>
+            YouTube
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Video 2 ── -->
+    <div class="video-card">
+      <div class="video-number">02</div>
+      <div class="video-embed-wrapper">
+        <iframe
+          src="https://www.youtube.com/embed/3NRTldIma7o"
+          title="Gemini 3.1 Pro实战指南：精通Deep Research、多模态分析、Workspace等"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen
+          loading="lazy">
+        </iframe>
+      </div>
+      <div class="video-body">
+        <p class="video-title">Gemini 3.1 Pro 实战指南：精通 Deep Research、多模态分析、Workspace 等</p>
+        <p class="video-desc">深度剖析 Gemini 3.1 Pro 在图像、视频和跨文件音频分析上的前沿能力，教你如何将其从聊天工具升级为自动化搞钱系统。</p>
+        <div class="video-footer">
+          <span class="video-tag">
+            <svg width="10" height="10" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+            </svg>
+            Gemini Pro
+          </span>
+          <a href="https://www.youtube.com/watch?v=3NRTldIma7o" target="_blank" rel="noopener" class="video-yt-link">
+            <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+            </svg>
+            YouTube
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Video 3 ── -->
+    <div class="video-card">
+      <div class="video-number">03</div>
+      <div class="video-embed-wrapper">
+        <iframe
+          src="https://www.youtube.com/embed/I17cc-a6qLI"
+          title="效率提升10倍❗️如何比90%的用户更高效地使用NotebookLM，这7款插件就够啦！"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen
+          loading="lazy">
+        </iframe>
+      </div>
+      <div class="video-body">
+        <p class="video-title">效率提升10倍❗️如何比90%的用户更高效地使用 NotebookLM，这7款插件就够啦！</p>
+        <p class="video-desc">分享7款提升 NotebookLM 使用效率的 Chrome 神级插件，涵盖视频图文批量导入、主界面分类管理、去水印以及无缝导出等实用功能。</p>
+        <div class="video-footer">
+          <span class="video-tag">
+            <svg width="10" height="10" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+            </svg>
+            NotebookLM
+          </span>
+          <a href="https://www.youtube.com/watch?v=I17cc-a6qLI" target="_blank" rel="noopener" class="video-yt-link">
+            <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+            </svg>
+            YouTube
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Video 4 ── -->
+    <div class="video-card">
+      <div class="video-number">04</div>
+      <div class="video-embed-wrapper">
+        <iframe
+          src="https://www.youtube.com/embed/zY5nGfKWfiY"
+          title="Google NotebookLM + Gemini 才是最强"外挂"！马哥实战：3个案例教你实现职场"降维打击""
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen
+          loading="lazy">
+        </iframe>
+      </div>
+      <div class="video-body">
+        <p class="video-title">Google NotebookLM + Gemini 才是最强「外挂」！马哥实战：3个案例教你实现职场「降维打击」</p>
+        <p class="video-desc">详解 NotebookLM 与 Gemini 的强强联手流。通过数据挖掘与 Canvas 画布视窗的完美互补，几分钟内将海量行业文件转化为动态可视化图表。</p>
+        <div class="video-footer">
+          <span class="video-tag">
+            <svg width="10" height="10" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+            </svg>
+            实战案例
+          </span>
+          <a href="https://www.youtube.com/watch?v=zY5nGfKWfiY" target="_blank" rel="noopener" class="video-yt-link">
+            <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+            </svg>
+            YouTube
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Video 5 ── -->
+    <div class="video-card">
+      <div class="video-number">05</div>
+      <div class="video-embed-wrapper">
+        <iframe
+          src="https://www.youtube.com/embed/AhSkVDN2LVg"
+          title="别再只让Antigravity写代码！你忽略的强大功能 Stop Just Using Antigravity for Code!"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen
+          loading="lazy">
+        </iframe>
+      </div>
+      <div class="video-body">
+        <p class="video-title">别再只让 Antigravity 写代码！你忽略的强大功能 · Stop Just Using Antigravity for Code!</p>
+        <p class="video-desc">探索由 Gemini 驱动的 AI 应用 Antigravity。它不只是 IDE 代码助手，更能通过多智能体协作无缝跑全套自动化办公工作流。</p>
+        <div class="video-footer">
+          <span class="video-tag">
+            <svg width="10" height="10" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+            </svg>
+            Antigravity
+          </span>
+          <a href="https://www.youtube.com/watch?v=AhSkVDN2LVg" target="_blank" rel="noopener" class="video-yt-link">
+            <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+            </svg>
+            YouTube
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer spacer -->
+    <div style="height: 1rem;"></div>
+
+  </div>
+
+</body>
+</html>

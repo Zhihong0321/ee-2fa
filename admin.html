@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sentinel 2FA — Admin Panel</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* Admin-specific overrides */
+    .admin-container {
+      width: 100%;
+      max-width: 860px;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    .admin-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: rgba(168, 85, 247, 0.15);
+      border: 1px solid rgba(168, 85, 247, 0.35);
+      color: #c084fc;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+    }
+
+    .account-section {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      overflow: hidden;
+    }
+
+    .account-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      gap: 1rem;
+    }
+
+    .account-section-info {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+
+    .account-section-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+
+    .account-section-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+    }
+
+    .account-section-name {
+      font-weight: 600;
+      font-size: 1rem;
+    }
+
+    .account-section-email {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    .clear-all-btn {
+      font-size: 0.75rem;
+      padding: 0.35rem 0.85rem;
+      color: var(--danger-color);
+      border-color: rgba(249,115,22,0.25);
+      border-radius: 8px;
+    }
+
+    .clear-all-btn:hover {
+      background: rgba(249,115,22,0.1);
+      border-color: var(--danger-color);
+    }
+
+    .slots-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .slots-table th {
+      text-align: left;
+      padding: 0.65rem 1.5rem;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      background: rgba(0,0,0,0.15);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .slots-table td {
+      padding: 0.85rem 1.5rem;
+      font-size: 0.88rem;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      vertical-align: middle;
+    }
+
+    .slots-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .slots-table tr:hover td {
+      background: rgba(255,255,255,0.02);
+    }
+
+    .wa-number {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--accent-cyan);
+    }
+
+    .claimed-date {
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+    }
+
+    .revoke-btn {
+      font-size: 0.72rem;
+      padding: 0.25rem 0.65rem;
+      color: var(--danger-color);
+      border-color: rgba(249,115,22,0.25);
+      border-radius: 6px;
+      background: transparent;
+      cursor: pointer;
+      font-family: var(--font-sans);
+      font-weight: 600;
+      transition: var(--transition-smooth);
+      border: 1px solid rgba(249,115,22,0.25);
+    }
+
+    .revoke-btn:hover {
+      background: rgba(249,115,22,0.12);
+      border-color: var(--danger-color);
+    }
+
+    .empty-slots {
+      padding: 1.5rem;
+      text-align: center;
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+    }
+
+    .slot-pip-row {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+
+    .slot-pip-sm {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+
+    .slot-pip-sm.filled {
+      background: rgba(0,229,255,0.35);
+      border-color: var(--accent-cyan);
+    }
+
+    /* Login screen */
+    #admin-login {
+      display: flex;
+    }
+
+    #admin-panel {
+      display: none;
+      flex-direction: column;
+      gap: 2rem;
+      width: 100%;
+    }
+
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-value {
+      font-size: 1.75rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--accent-cyan);
+    }
+
+    @media (max-width: 600px) {
+      .stats-row { grid-template-columns: 1fr 1fr; }
+      .slots-table th, .slots-table td { padding: 0.65rem 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- ── Login Screen ─────────────────────────────────────────────────────── -->
+  <div id="admin-login" class="modal-overlay" style="position:fixed;display:flex;">
+    <div class="lock-screen-container">
+      <div class="lock-icon-container">
+        <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z">
+          </path>
+        </svg>
+      </div>
+      <div class="lock-screen-text">
+        <h2>Admin Panel</h2>
+        <p>Enter the admin password to manage account slots.</p>
+      </div>
+      <form id="admin-login-form" class="lock-screen-form">
+        <input type="password" id="admin-pw-input" class="form-input"
+          placeholder="Admin Password" required autocomplete="current-password">
+        <p id="admin-login-error" style="color:var(--danger-color);font-size:0.82rem;display:none;">
+          Incorrect password.
+        </p>
+        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:0.85rem;">
+          Login
+        </button>
+        <a href="/" style="font-size:0.8rem;color:var(--text-secondary);text-align:center;margin-top:0.25rem;">
+          ← Back to Vault
+        </a>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Admin Panel ──────────────────────────────────────────────────────── -->
+  <div id="admin-panel">
+    <div class="admin-container">
+
+      <!-- Header -->
+      <header>
+        <div class="brand">
+          <div class="brand-icon">S</div>
+          <div class="brand-title">
+            <h1>Sentinel 2FA</h1>
+            <p>Admin Panel</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <span class="admin-badge">
+            <svg width="10" height="10" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+            </svg>
+            Admin
+          </span>
+          <button class="btn btn-icon" id="refresh-btn" title="Refresh">
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+          </button>
+          <a href="/" class="btn btn-icon" title="Back to Vault">
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+            </svg>
+          </a>
+        </div>
+      </header>
+
+      <!-- Stats -->
+      <div class="stats-row" id="stats-row">
+        <div class="stat-card">
+          <span class="stat-label">Total Accounts</span>
+          <span class="stat-value" id="stat-accounts">—</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Total Slots Claimed</span>
+          <span class="stat-value" id="stat-claimed">—</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Available Slots</span>
+          <span class="stat-value" id="stat-available">—</span>
+        </div>
+      </div>
+
+      <!-- Account Slot Sections -->
+      <div id="accounts-slot-list" style="display:flex;flex-direction:column;gap:1.25rem;"></div>
+
+    </div>
+  </div>
+
+  <script>
+    const ADMIN_PW_KEY = 'admin_session_pw';
+    let adminPassword = '';
+    let vaultAccounts = [];
+    let allSlots = {};
+    let accountsMeta = {};
+
+    // ── Toast ──────────────────────────────────────────────────────────────────
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type === 'error' ? 'toast-error' : ''}`;
+      toast.innerHTML = `<span class="toast-icon">${type === 'success' ? '✓' : '✕'}</span><span>${message}</span>`;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(20px)';
+        toast.style.transition = 'all 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // ── Avatar color (same logic as app.js) ───────────────────────────────────
+    function getAvatarColor(issuer) {
+      const name = (issuer || '').toLowerCase();
+      if (name.includes('google')) return '#4285F4';
+      if (name.includes('github')) return '#6e5494';
+      if (name.includes('discord')) return '#7289DA';
+      if (name.includes('slack')) return '#4A154B';
+      if (name.includes('microsoft')) return '#00A4EF';
+      if (name.includes('aws') || name.includes('amazon')) return '#FF9900';
+      if (name.includes('facebook') || name.includes('meta')) return '#1877F2';
+      if (name.includes('dropbox')) return '#0061FF';
+      let hash = 0;
+      for (let i = 0; i < issuer.length; i++) hash = issuer.charCodeAt(i) + ((hash << 5) - hash);
+      return `hsl(${Math.abs(hash) % 360}, 75%, 60%)`;
+    }
+
+    function escapeHtml(str) {
+      const d = document.createElement('div');
+      d.textContent = str || '';
+      return d.innerHTML;
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    // ── Load data ──────────────────────────────────────────────────────────────
+    async function loadData() {
+      try {
+        // Load vault (accounts list)
+        const vaultRes = await fetch('/api/vault');
+        const vault = await vaultRes.json();
+        vaultAccounts = vault.plainAccounts || [];
+
+        // Load slots with admin auth
+        const slotsRes = await fetch('/api/admin/slots', {
+          headers: { 'x-admin-password': adminPassword }
+        });
+        if (slotsRes.status === 401) {
+          showToast('Session expired. Please re-login.', 'error');
+          logout();
+          return;
+        }
+        allSlots = await slotsRes.json();
+
+        // Load accounts meta (login info)
+        const metaRes = await fetch('/api/accounts-meta', {
+          headers: { 'x-admin-password': adminPassword }
+        });
+        accountsMeta = metaRes.ok ? await metaRes.json() : {};
+
+        renderStats();
+        renderAccountSections();
+      } catch (e) {
+        showToast('Failed to load data.', 'error');
+        console.error(e);
+      }
+    }
+
+    // ── Stats ──────────────────────────────────────────────────────────────────
+    function renderStats() {
+      const totalAccounts = vaultAccounts.length;
+      let totalClaimed = 0;
+      for (const list of Object.values(allSlots)) totalClaimed += list.length;
+      const totalAvailable = (totalAccounts * 3) - totalClaimed;
+
+      document.getElementById('stat-accounts').textContent = totalAccounts;
+      document.getElementById('stat-claimed').textContent = totalClaimed;
+      document.getElementById('stat-available').textContent = Math.max(0, totalAvailable);
+    }
+
+    // ── Account sections ───────────────────────────────────────────────────────
+    function renderAccountSections() {
+      const container = document.getElementById('accounts-slot-list');
+      if (vaultAccounts.length === 0) {
+        container.innerHTML = `<div class="empty-slots" style="background:var(--card-bg);border:1px solid var(--card-border);border-radius:20px;padding:3rem;">
+          No accounts found in vault.</div>`;
+        return;
+      }
+
+      container.innerHTML = vaultAccounts.map(acc => {
+        const color    = getAvatarColor(acc.issuer || 'A');
+        const initial  = (acc.issuer || 'A')[0].toUpperCase();
+        const slotList = allSlots[acc.id] || [];
+        const taken    = slotList.length;
+        const meta     = accountsMeta[acc.id] || {};
+
+        // Pip row (3 slots)
+        let pips = '';
+        for (let i = 0; i < 3; i++) {
+          pips += `<span class="slot-pip-sm ${i < taken ? 'filled' : ''}"></span>`;
+        }
+
+        // Slot rows
+        let rows = '';
+        if (slotList.length === 0) {
+          rows = `<tr><td colspan="3" class="empty-slots">No slots claimed yet.</td></tr>`;
+        } else {
+          rows = slotList.map(s => `
+            <tr>
+              <td><span class="wa-number">${escapeHtml(s.whatsapp)}</span></td>
+              <td><span class="claimed-date">${formatDate(s.claimedAt)}</span></td>
+              <td style="text-align:right;">
+                <button class="revoke-btn" onclick="revokeSlot('${escapeHtml(acc.id)}', '${escapeHtml(s.whatsapp)}')">
+                  Revoke
+                </button>
+              </td>
+            </tr>
+          `).join('');
+        }
+
+        return `
+          <div class="account-section">
+            <div class="account-section-header">
+              <div class="account-section-info">
+                <div class="account-section-avatar"
+                  style="color:${color};background:${color}18;border:1px solid ${color}33;">
+                  ${initial}
+                </div>
+                <div class="account-section-meta">
+                  <span class="account-section-name">${escapeHtml(acc.issuer || 'Authenticator')}</span>
+                  <span class="account-section-email">${escapeHtml(acc.email || '')}</span>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:0.75rem;">
+                <div class="slot-pip-row">${pips}</div>
+                <span style="font-size:0.78rem;color:var(--text-secondary);font-family:var(--font-mono);">${taken}/3</span>
+                ${taken > 0 ? `<button class="btn clear-all-btn" onclick="clearAllSlots('${escapeHtml(acc.id)}')">Clear All</button>` : ''}
+              </div>
+            </div>
+
+            <!-- Login Info Form -->
+            <div style="padding:1rem 1.5rem;border-bottom:1px solid rgba(255,255,255,0.05);background:rgba(0,0,0,0.1);">
+              <p style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);font-weight:600;margin-bottom:0.75rem;">
+                Login Info (sent to users on claim)
+              </p>
+              <div style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;">
+                <div style="flex:1;min-width:180px;">
+                  <label style="font-size:0.72rem;color:var(--text-secondary);display:block;margin-bottom:0.3rem;">Email</label>
+                  <input type="text" id="meta-email-${escapeHtml(acc.id)}" class="form-input"
+                    style="padding:0.55rem 0.85rem;font-size:0.85rem;"
+                    placeholder="login@gmail.com"
+                    value="${escapeHtml(meta.loginEmail || '')}">
+                </div>
+                <div style="flex:1;min-width:180px;">
+                  <label style="font-size:0.72rem;color:var(--text-secondary);display:block;margin-bottom:0.3rem;">Password</label>
+                  <input type="text" id="meta-pw-${escapeHtml(acc.id)}" class="form-input"
+                    style="padding:0.55rem 0.85rem;font-size:0.85rem;"
+                    placeholder="account password"
+                    value="${escapeHtml(meta.loginPassword || '')}">
+                </div>
+                <button class="btn btn-primary" style="padding:0.55rem 1rem;font-size:0.82rem;white-space:nowrap;"
+                  onclick="saveLoginInfo('${escapeHtml(acc.id)}')">
+                  Save
+                </button>
+              </div>
+              ${meta.loginEmail
+                ? `<p style="font-size:0.75rem;color:var(--success-color);margin-top:0.5rem;">✓ Login info configured</p>`
+                : `<p style="font-size:0.75rem;color:var(--danger-color);margin-top:0.5rem;">⚠ No login info set — users cannot claim until this is filled</p>`
+              }
+            </div>
+
+            <table class="slots-table">
+              <thead>
+                <tr>
+                  <th>WhatsApp Number</th>
+                  <th>Claimed At</th>
+                  <th style="text-align:right;">Action</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ── Save login info ────────────────────────────────────────────────────────
+    async function saveLoginInfo(accountId) {
+      const loginEmail    = document.getElementById(`meta-email-${accountId}`).value.trim();
+      const loginPassword = document.getElementById(`meta-pw-${accountId}`).value.trim();
+      if (!loginEmail || !loginPassword) {
+        showToast('Both email and password are required.', 'error');
+        return;
+      }
+      try {
+        const res = await fetch('/api/accounts-meta', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-password': adminPassword
+          },
+          body: JSON.stringify({ accountId, loginEmail, loginPassword })
+        });
+        const data = await res.json();
+        if (!res.ok) { showToast(data.error || 'Failed to save.', 'error'); return; }
+        accountsMeta[accountId] = { loginEmail, loginPassword };
+        showToast('Login info saved.');
+        renderAccountSections(); // re-render to update status indicator
+      } catch (e) {
+        showToast('Network error.', 'error');
+      }
+    }
+
+    // ── Revoke slot ────────────────────────────────────────────────────────────
+    async function revokeSlot(accountId, whatsapp) {
+      if (!confirm(`Revoke slot for ${whatsapp}?`)) return;
+      try {
+        const res = await fetch('/api/admin/slots/revoke', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-password': adminPassword
+          },
+          body: JSON.stringify({ accountId, whatsapp })
+        });
+        const data = await res.json();
+        if (!res.ok) { showToast(data.error || 'Failed to revoke.', 'error'); return; }
+        showToast('Slot revoked.');
+        await loadData();
+      } catch (e) {
+        showToast('Network error.', 'error');
+      }
+    }
+
+    // ── Clear all slots for account ────────────────────────────────────────────
+    async function clearAllSlots(accountId) {
+      if (!confirm('Clear ALL slots for this account? This cannot be undone.')) return;
+      try {
+        const res = await fetch(`/api/admin/slots/clear/${encodeURIComponent(accountId)}`, {
+          method: 'DELETE',
+          headers: { 'x-admin-password': adminPassword }
+        });
+        const data = await res.json();
+        if (!res.ok) { showToast(data.error || 'Failed to clear.', 'error'); return; }
+        showToast('All slots cleared.');
+        await loadData();
+      } catch (e) {
+        showToast('Network error.', 'error');
+      }
+    }
+
+    // ── Login / Logout ─────────────────────────────────────────────────────────
+    function logout() {
+      adminPassword = '';
+      document.getElementById('admin-login').style.display = 'flex';
+      document.getElementById('admin-panel').style.display = 'none';
+    }
+
+    document.getElementById('admin-login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const pw = document.getElementById('admin-pw-input').value;
+      const errEl = document.getElementById('admin-login-error');
+
+      // Verify by hitting the admin API
+      const res = await fetch('/api/admin/slots', {
+        headers: { 'x-admin-password': pw }
+      });
+
+      if (res.status === 401) {
+        errEl.style.display = 'block';
+        document.getElementById('admin-pw-input').value = '';
+        return;
+      }
+
+      errEl.style.display = 'none';
+      adminPassword = pw;
+      allSlots = await res.json();
+
+      document.getElementById('admin-login').style.display = 'none';
+      document.getElementById('admin-panel').style.display = 'flex';
+
+      await loadData();
+    });
+
+    document.getElementById('refresh-btn').addEventListener('click', async () => {
+      await loadData();
+      showToast('Data refreshed.');
+    });
+  </script>
+</body>
+</html>

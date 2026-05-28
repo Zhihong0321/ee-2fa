@@ -247,7 +247,10 @@ const state = {
   searchQuery: "",
   activeCardMenuId: null,
   editingAccountId: null,
-  remoteEncryptedData: null
+  remoteEncryptedData: null,
+  slots: {},           // { accountId: count }
+  myWhatsApp: localStorage.getItem("my_whatsapp") || "",
+  myClaims: {}         // { accountId: waNumber } — which accounts this device claimed
 };
 
 // LocalStorage Keys
@@ -287,6 +290,7 @@ async function initVault() {
       localStorage.setItem(STORAGE_KEYS.PLAIN_VAULT, JSON.stringify(payload.plainAccounts));
       localStorage.removeItem(STORAGE_KEYS.ENCRYPTED_VAULT);
       
+      await loadSlots();
       renderAccounts();
       showLockScreen(false);
     } else {
@@ -387,7 +391,7 @@ async function saveVault() {
     });
     
     if (!response.ok) throw new Error('API server failed to save data');
-    showToast("Vault synchronized to server.");
+    // Silent success — no toast needed for routine saves
   } catch (error) {
     console.warn("Could not sync vault with server. Saved locally in browser.", error);
     showToast("Offline: Saved locally to browser.", "error");
@@ -476,6 +480,8 @@ function renderAccounts() {
           </div>
           <span style="font-size: 0.75rem; opacity: 0.7;">Click token to copy</span>
         </div>
+
+        ${renderSlotBar(acc.id)}
       </div>
     `;
   });
@@ -870,6 +876,7 @@ async function handleUnlockSubmit(event) {
     state.isLocked = false;
 
     showLockScreen(false);
+    await loadSlots();
     renderAccounts();
     updateSecurityTabInfo();
     showToast("Vault unlocked successfully!");
@@ -1091,9 +1098,237 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Initialize data
+  // Initialize data — load claims first so renderAccounts has them ready
+  loadMyClaims();
   initVault();
+
+  // Initialize slot modal listeners
+  _initClaimListeners();
+  _initUnclaimListeners();
 
   // Run OTP timers update loop (every 1000ms)
   setInterval(updateAllTokens, 1000);
 });
+
+// ─── SLOT SYSTEM ──────────────────────────────────────────────────────────────
+
+const MAX_SLOTS_CLIENT = 3;
+
+/**
+ * Convert Malaysian phone input to normalised form for display/storage.
+ * 0123456789  → 60123456789
+ * 60123456789 → 60123456789
+ * +60123456789→ 60123456789
+ */
+function normaliseMYPhone(raw) {
+  let digits = raw.replace(/\D/g, '');
+  if (digits.startsWith('60')) return digits;
+  if (digits.startsWith('0'))  return '6' + digits;
+  return '60' + digits;
+}
+
+/**
+ * Validate Malaysian mobile number (after normalisation should be 10-11 digits starting with 60)
+ */
+function isValidMYPhone(normalised) {
+  return /^60\d{8,9}$/.test(normalised);
+}
+
+/**
+ * Fetch current slot counts from server and store in state.slots
+ * Server returns { accountId: count } — no WA numbers exposed to client
+ */
+async function loadSlots() {
+  try {
+    const res = await fetch('/api/slots');
+    if (res.ok) {
+      state.slots = await res.json(); // { accountId: number }
+    }
+  } catch (e) {
+    console.warn('Could not load slots:', e);
+  }
+}
+
+/**
+ * Build the slot bar HTML for a given accountId.
+ * Shows 3 slot pips + a claim/release button.
+ */
+function renderSlotBar(accountId) {
+  const taken    = state.slots[accountId] || 0;
+  const myWA     = state.myWhatsApp;
+  // We track locally which accounts this device claimed
+  const claimed  = state.myClaims || {};
+  const iClaimed = myWA && claimed[accountId] === myWA;
+
+  // Build 3 pip indicators
+  let pips = '';
+  for (let i = 0; i < MAX_SLOTS_CLIENT; i++) {
+    const filled = i < taken;
+    // We can't know which exact slot index is ours (server only returns count),
+    // so highlight all filled pips with a softer "mine" style when we claimed this account
+    const isMe = iClaimed && filled;
+    pips += `<span class="slot-pip ${filled ? 'slot-pip-filled' : ''} ${isMe ? 'slot-pip-mine' : ''}"
+      title="${filled ? (iClaimed && i === 0 ? 'You (and others)' : 'Taken') : 'Available'}"></span>`;
+  }
+
+  let actionBtn = '';
+  if (iClaimed) {
+    actionBtn = `<button class="slot-btn slot-btn-release" onclick="openUnclaimModal('${accountId}')">Release</button>`;
+  } else if (taken < MAX_SLOTS_CLIENT) {
+    actionBtn = `<button class="slot-btn slot-btn-claim" onclick="openClaimModal('${accountId}')">Claim</button>`;
+  } else {
+    actionBtn = `<span class="slot-full-label">Full</span>`;
+  }
+
+  return `
+    <div class="slot-bar">
+      <div class="slot-pips">${pips}</div>
+      <div class="slot-bar-right">
+        <span class="slot-count">${taken}/${MAX_SLOTS_CLIENT} slots</span>
+        ${actionBtn}
+      </div>
+    </div>
+  `;
+}
+
+// Load which accounts this device has claimed (stored locally)
+function loadMyClaims() {
+  try {
+    state.myClaims = JSON.parse(localStorage.getItem('my_claims') || '{}');
+  } catch (e) {
+    state.myClaims = {};
+  }
+}
+
+function saveMyClaims() {
+  localStorage.setItem('my_claims', JSON.stringify(state.myClaims || {}));
+}
+
+// ─── Claim Modal ──────────────────────────────────────────────────────────────
+
+let _claimTargetId = null;
+
+function openClaimModal(accountId) {
+  _claimTargetId = accountId;
+  const input = document.getElementById('claim-wa-input');
+  // Pre-fill with previously used number (show in local format if starts with 60)
+  let prefill = state.myWhatsApp || '';
+  if (prefill.startsWith('60')) prefill = '0' + prefill.slice(2);
+  input.value = prefill;
+  // Clear any previous preview/error
+  document.getElementById('claim-wa-preview').textContent = '';
+  document.getElementById('claim-error').textContent = '';
+  openModal('claim-modal');
+}
+
+function _initClaimListeners() {
+  // Live preview: show converted number as user types
+  document.getElementById('claim-wa-input').addEventListener('input', (e) => {
+    const raw     = e.target.value.trim();
+    const preview = document.getElementById('claim-wa-preview');
+    const errEl   = document.getElementById('claim-error');
+    if (!raw) { preview.textContent = ''; errEl.textContent = ''; return; }
+    const norm = normaliseMYPhone(raw);
+    if (isValidMYPhone(norm)) {
+      preview.textContent = `Will send to: +${norm}`;
+      preview.style.color = 'var(--success-color)';
+      errEl.textContent = '';
+    } else {
+      preview.textContent = '';
+      errEl.textContent = 'Invalid number. Enter 10–11 digit Malaysian number e.g. 0123456789';
+    }
+  });
+
+  document.getElementById('claim-confirm-btn').addEventListener('click', async () => {
+    const raw   = document.getElementById('claim-wa-input').value.trim();
+    const errEl = document.getElementById('claim-error');
+
+    if (!raw) { errEl.textContent = 'Please enter your WhatsApp number.'; return; }
+
+    const norm = normaliseMYPhone(raw);
+    if (!isValidMYPhone(norm)) {
+      errEl.textContent = 'Invalid number. Enter 10–11 digit Malaysian number e.g. 0123456789';
+      return;
+    }
+
+    const btn = document.getElementById('claim-confirm-btn');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    try {
+      const res  = await fetch('/api/slots/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId: _claimTargetId, whatsapp: norm })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        errEl.textContent = data.error || 'Failed to claim slot.';
+      } else {
+        // Save locally
+        state.myWhatsApp = norm;
+        localStorage.setItem('my_whatsapp', norm);
+        if (!state.myClaims) state.myClaims = {};
+        state.myClaims[_claimTargetId] = norm;
+        saveMyClaims();
+
+        await loadSlots();
+        renderAccounts();
+        closeModal('claim-modal');
+        showToast('Slot claimed! Login info sent to your WhatsApp.');
+      }
+    } catch (e) {
+      errEl.textContent = 'Network error. Try again.';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Claim Slot';
+    }
+  });
+}
+
+// ─── Unclaim Modal ────────────────────────────────────────────────────────────
+
+let _unclaimTargetId = null;
+
+function openUnclaimModal(accountId) {
+  _unclaimTargetId = accountId;
+  // Show in local format
+  let display = state.myWhatsApp || '';
+  if (display.startsWith('60')) display = '0' + display.slice(2);
+  document.getElementById('unclaim-wa-display').textContent = display;
+  openModal('unclaim-modal');
+}
+
+function _initUnclaimListeners() {
+  document.getElementById('unclaim-confirm-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('unclaim-confirm-btn');
+    btn.disabled = true;
+    btn.textContent = 'Releasing…';
+
+    try {
+      const res  = await fetch('/api/slots/unclaim', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId: _unclaimTargetId, whatsapp: state.myWhatsApp })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Failed to release slot.', 'error');
+      } else {
+        // Remove local record
+        if (state.myClaims) delete state.myClaims[_unclaimTargetId];
+        saveMyClaims();
+
+        await loadSlots();
+        renderAccounts();
+        closeModal('unclaim-modal');
+        showToast('Slot released.');
+      }
+    } catch (e) {
+      showToast('Network error. Try again.', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Release Slot';
+    }
+  });
+}
