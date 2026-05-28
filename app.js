@@ -1128,10 +1128,13 @@ function normaliseMYPhone(raw) {
 }
 
 /**
- * Validate Malaysian mobile number (after normalisation should be 10-11 digits starting with 60)
+ * Validate Malaysian mobile number (after normalisation should be 10-12 digits starting with 60)
+ * 60 + 8 digits  = 10 total (e.g. 60123456789 → old format)
+ * 60 + 9 digits  = 11 total (e.g. 601234567890 → standard)
+ * 60 + 10 digits = 12 total (e.g. 60112345678 → 011 numbers)
  */
 function isValidMYPhone(normalised) {
-  return /^60\d{8,9}$/.test(normalised);
+  return /^60\d{8,10}$/.test(normalised);
 }
 
 /**
@@ -1235,7 +1238,7 @@ function _initClaimListeners() {
       errEl.textContent = '';
     } else {
       preview.textContent = '';
-      errEl.textContent = 'Invalid number. Enter 10–11 digit Malaysian number e.g. 0123456789';
+      errEl.textContent = 'Invalid number. Enter Malaysian number e.g. 0123456789 or 01121000099';
     }
   });
 
@@ -1247,7 +1250,7 @@ function _initClaimListeners() {
 
     const norm = normaliseMYPhone(raw);
     if (!isValidMYPhone(norm)) {
-      errEl.textContent = 'Invalid number. Enter 10–11 digit Malaysian number e.g. 0123456789';
+      errEl.textContent = 'Invalid number. Enter Malaysian number e.g. 0123456789 or 01121000099';
       return;
     }
 

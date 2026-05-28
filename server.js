@@ -55,9 +55,9 @@ function normaliseMY(raw) {
   return '60' + digits;
 }
 
-// Validate after normalisation: must be 60 + 8 or 9 digits = 10 or 11 digits total
+// Validate after normalisation: 60 + 8–10 digits (covers 010–019 prefixes)
 function isValidMYNumber(normalised) {
-  return /^60\d{8,9}$/.test(normalised);
+  return /^60\d{8,10}$/.test(normalised);
 }
 
 // ─── WhatsApp sender ──────────────────────────────────────────────────────────
