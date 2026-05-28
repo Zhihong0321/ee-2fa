@@ -266,6 +266,11 @@ app.delete('/api/admin/slots/clear/:accountId', requireAdmin, (req, res) => {
   return res.json({ success: true });
 });
 
+// ─── Page routes ─────────────────────────────────────────────────────────────
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin.html'));
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`Sentinel 2FA Server running on port ${PORT}`);
