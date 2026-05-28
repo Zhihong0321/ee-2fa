@@ -317,6 +317,10 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'admin.html'));
 });
 
+app.get('/learn', (req, res) => {
+  res.sendFile(path.join(__dirname, 'learn.html'));
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`Sentinel 2FA Server running on port ${PORT}`);
