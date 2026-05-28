@@ -373,10 +373,12 @@
     // ── Load data ──────────────────────────────────────────────────────────────
     async function loadData() {
       try {
-        // Load vault (accounts list)
-        const vaultRes = await fetch('/api/vault');
-        const vault = await vaultRes.json();
-        vaultAccounts = vault.plainAccounts || [];
+        // Load accounts via admin endpoint (handles encrypted vault too)
+        const accRes = await fetch('/api/admin/accounts', {
+          headers: { 'x-admin-password': adminPassword }
+        });
+        if (accRes.status === 401) { showToast('Unauthorized.', 'error'); return; }
+        vaultAccounts = await accRes.json();
 
         // Load slots with admin auth
         const slotsRes = await fetch('/api/admin/slots', {
@@ -586,43 +588,18 @@
       }
     }
 
-    // ── Login / Logout ─────────────────────────────────────────────────────────
-    function logout() {
-      adminPassword = '';
-      document.getElementById('admin-login').style.display = 'flex';
-      document.getElementById('admin-panel').style.display = 'none';
-    }
-
-    document.getElementById('admin-login-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const pw = document.getElementById('admin-pw-input').value;
-      const errEl = document.getElementById('admin-login-error');
-
-      // Verify by hitting the admin API
-      const res = await fetch('/api/admin/slots', {
-        headers: { 'x-admin-password': pw }
-      });
-
-      if (res.status === 401) {
-        errEl.style.display = 'block';
-        document.getElementById('admin-pw-input').value = '';
-        return;
-      }
-
-      errEl.style.display = 'none';
-      adminPassword = pw;
-      allSlots = await res.json();
-
-      document.getElementById('admin-login').style.display = 'none';
-      document.getElementById('admin-panel').style.display = 'flex';
-
-      await loadData();
-    });
-
     document.getElementById('refresh-btn').addEventListener('click', async () => {
       await loadData();
       showToast('Data refreshed.');
     });
+
+    // ── Auto-login on page load ────────────────────────────────────────────────
+    (async () => {
+      adminPassword = '@eternalgy9999';
+      document.getElementById('admin-login').style.display = 'none';
+      document.getElementById('admin-panel').style.display = 'flex';
+      await loadData();
+    })();
   </script>
 </body>
 </html>

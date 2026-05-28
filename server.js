@@ -2,6 +2,7 @@ const express = require('express');
 const fs      = require('fs');
 const path    = require('path');
 const https   = require('https');
+const crypto  = require('crypto');
 
 const app  = express();
 const PORT = process.env.PORT || 8000;
@@ -44,7 +45,40 @@ const writeSlots       = (d) => writeJSON(slotsFile, d);
 const readAccountsMeta = () => readJSON(accountsFile, {});
 const writeAccountsMeta= (d) => writeJSON(accountsFile, d);
 
-// ─── Phone normalisation ──────────────────────────────────────────────────────
+// ─── Vault decryption (mirrors Web Crypto logic in app.js) ───────────────────
+// Layout: 16 bytes salt | 12 bytes IV | ciphertext (AES-256-GCM)
+function decryptVault(encryptedBase64, password) {
+  try {
+    const combined = Buffer.from(encryptedBase64, 'base64');
+    const salt       = combined.slice(0, 16);
+    const iv         = combined.slice(16, 28);
+    const ciphertext = combined.slice(28);
+
+    // Derive key: PBKDF2-SHA256, 100000 iterations, 32 bytes
+    const key = crypto.pbkdf2Sync(password, salt, 100000, 32, 'sha256');
+
+    // AES-256-GCM: last 16 bytes of ciphertext are the auth tag
+    const authTag    = ciphertext.slice(ciphertext.length - 16);
+    const encrypted  = ciphertext.slice(0, ciphertext.length - 16);
+
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(authTag);
+    const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+    return JSON.parse(decrypted.toString('utf8'));
+  } catch (e) {
+    return null;
+  }
+}
+
+// ─── Helper: get plain accounts (handles both plain and encrypted vault) ──────
+function getPlainAccounts(adminPw) {
+  const vault = readJSON(storageFile, {});
+  if (vault.plainAccounts) return vault.plainAccounts;
+  if (vault.encryptedData) return decryptVault(vault.encryptedData, adminPw) || [];
+  return [];
+}
+
+
 // Accepts: 0123456789 / 60123456789 / +60123456789
 // Returns: 60123456789  (no + prefix, digits only — Baileys format)
 function normaliseMY(raw) {
@@ -238,6 +272,12 @@ app.delete('/api/slots/unclaim', (req, res) => {
 // GET /api/admin/slots  — full slot list with WA numbers
 app.get('/api/admin/slots', requireAdmin, (req, res) => {
   return res.json(readSlots());
+});
+
+// GET /api/admin/accounts  — returns plain accounts (decrypts if needed)
+app.get('/api/admin/accounts', requireAdmin, (req, res) => {
+  const accounts = getPlainAccounts(req.headers['x-admin-password']);
+  return res.json(accounts);
 });
 
 // DELETE /api/admin/slots/revoke
