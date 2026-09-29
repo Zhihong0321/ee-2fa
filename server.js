@@ -25,7 +25,11 @@ const slotsFile    = path.join(storageDir, 'slots.json');
 const accountsFile = path.join(storageDir, 'accounts_meta.json'); // stores email+password per accountId
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const ADMIN_PASSWORD  = '@eternalgy9999';
+const ADMIN_PASSWORD  = process.env.ADMIN_PASSWORD;
+if (!ADMIN_PASSWORD) {
+  console.error('FATAL: ADMIN_PASSWORD environment variable is not set.');
+  process.exit(1);
+}
 const MAX_SLOTS       = 3;
 const WA_SESSION_ID   = 'eternalgy-auth';
 
