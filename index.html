@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Eternalgy Digital Asset - Secure Time-based Authenticator</title>
-  <meta name="description" content="A gorgeous, local-first, highly secure 2FA OTP authenticator app that runs completely in your browser. Encrypt your database with AES-256 master password locking.">
+  <meta name="description" content="Shared 2FA OTP vault for Eternalgy Digital Asset. Unlock with the admin password — one account list for everyone.">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
   <div id="toast-container" class="toast-container"></div>
 
   <!-- Lock Screen (shown when vault is locked) -->
-  <div id="lock-screen" class="modal-overlay" style="display: none;">
+  <div id="lock-screen" class="modal-overlay" style="display: flex;">
     <div class="lock-screen-container">
       <div class="lock-icon-container">
         <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
@@ -22,10 +22,10 @@
       </div>
       <div class="lock-screen-text">
         <h2 id="lock-title">Vault Locked</h2>
-        <p id="lock-desc">Enter your Master Password to decrypt your 2FA accounts.</p>
+        <p id="lock-desc">Enter the Admin Password to unlock the shared 2FA vault.</p>
       </div>
       <form id="lock-screen-form" class="lock-screen-form">
-        <input type="password" id="master-password-input" class="form-input" placeholder="Master Password" required autocomplete="current-password">
+        <input type="password" id="admin-password-input" class="form-input" placeholder="Admin Password" required autocomplete="current-password">
         <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 0.85rem;">
           Unlock Vault
         </button>
@@ -34,7 +34,7 @@
   </div>
 
   <!-- Main Application Container -->
-  <div id="main-app" class="app-container">
+  <div id="main-app" class="app-container" style="display: none;">
     
     <!-- Top Header -->
     <header>
@@ -193,38 +193,14 @@
         <div id="tab-security" class="tab-pane active">
           <div class="settings-option">
             <div class="settings-option-desc">
-              <span class="settings-option-title">Master Password Vault Locking</span>
-              <span class="settings-option-sub">Status: <strong id="security-status-text">Checking...</strong></span>
+              <span class="settings-option-title">Shared Vault</span>
+              <span class="settings-option-sub">Status: <strong id="security-status-text">Locked</strong></span>
             </div>
           </div>
-
-          <form id="password-setup-form" style="display: flex; flex-direction: column; gap: 1rem; margin-top: 0.5rem;">
-            <p class="form-note">Encrypt your accounts with a master password. Your data is stored locally in your browser and encrypted with 256-bit AES-GCM. <strong>Do not forget this password!</strong></p>
-            
-            <div class="form-group" id="setup-current-pw-group" style="display: none;">
-              <label class="form-label" for="setup-current-pw">Current Password</label>
-              <input type="password" id="setup-current-pw" class="form-input" placeholder="Current Password">
-            </div>
-            
-            <div class="form-group">
-              <label class="form-label" for="setup-new-pw">Master Password</label>
-              <input type="password" id="setup-new-pw" class="form-input" placeholder="Enter password (min 6 chars)" required autocomplete="new-password">
-            </div>
-            
-            <div class="form-group">
-              <label class="form-label" for="setup-confirm-pw">Confirm Master Password</label>
-              <input type="password" id="setup-confirm-pw" class="form-input" placeholder="Re-enter password" required autocomplete="new-password">
-            </div>
-
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
-              <button type="button" class="btn" id="disable-pw-btn" style="color: var(--danger-color); border-color: rgba(249, 115, 22, 0.15); display: none;">
-                Disable Encryption
-              </button>
-              <button type="submit" class="btn btn-primary" style="margin-left: auto;">
-                Set / Update Password
-              </button>
-            </div>
-          </form>
+          <p class="form-note" style="margin-top: 0.75rem;">
+            Everyone shares one vault. Unlock with the same <strong>Admin Password</strong> used for Admin and SaaS.
+            Accounts are stored on the server — not as a per-browser encrypted copy.
+          </p>
         </div>
 
         <!-- Tab Panel: Backup & Restore -->

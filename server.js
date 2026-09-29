@@ -199,40 +199,44 @@ function sendWhatsApp(to, text) {
 app.use(express.json());
 app.use(express.static(__dirname));
 
-// ─── Vault API ────────────────────────────────────────────────────────────────
-app.get('/api/vault', (req, res) => {
-  if (!fs.existsSync(storageFile)) return res.json({ encryptedData: null, plainAccounts: null });
-  try {
-    const vault = JSON.parse(fs.readFileSync(storageFile, 'utf8'));
-    // Auto-decrypt on the server so the frontend never sees a lock screen
-    if (vault.encryptedData) {
-      const accounts = decryptVault(vault.encryptedData, ADMIN_PASSWORD);
-      if (accounts) return res.json({ encryptedData: null, plainAccounts: accounts });
-    }
-    return res.json(vault);
-  } catch (e) {
-    return res.status(500).json({ error: 'Failed to read vault.' });
-  }
-});
-
-app.post('/api/vault', (req, res) => {
-  try {
-    const payload = req.body;
-    if (payload.encryptedData === undefined && payload.plainAccounts === undefined)
-      return res.status(400).json({ error: 'Invalid payload structure.' });
-    fs.writeFileSync(storageFile, JSON.stringify(payload, null, 2), 'utf8');
-    return res.json({ success: true });
-  } catch (e) {
-    return res.status(500).json({ error: 'Failed to write vault.' });
-  }
-});
-
 // ─── Admin middleware ─────────────────────────────────────────────────────────
 function requireAdmin(req, res, next) {
   if (req.headers['x-admin-password'] !== ADMIN_PASSWORD)
     return res.status(401).json({ error: 'Unauthorized.' });
   next();
 }
+
+// ─── Vault API (shared plain vault; same ADMIN_PASSWORD as /admin and /saas) ──
+app.get('/api/vault', requireAdmin, (req, res) => {
+  try {
+    const vault = readJSON(storageFile, {});
+    // Migrate legacy encrypted vault → plain shared accounts
+    if (vault.encryptedData) {
+      const accounts = decryptVault(vault.encryptedData, ADMIN_PASSWORD);
+      if (accounts) {
+        writeJSON(storageFile, { plainAccounts: accounts, encryptedData: null });
+        return res.json({ plainAccounts: accounts });
+      }
+      return res.status(500).json({ error: 'Failed to decrypt vault.' });
+    }
+    const accounts = Array.isArray(vault.plainAccounts) ? vault.plainAccounts : [];
+    return res.json({ plainAccounts: accounts });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to read vault.' });
+  }
+});
+
+app.post('/api/vault', requireAdmin, (req, res) => {
+  try {
+    const plainAccounts = req.body && req.body.plainAccounts;
+    if (!Array.isArray(plainAccounts))
+      return res.status(400).json({ error: 'Invalid payload structure.' });
+    writeJSON(storageFile, { plainAccounts, encryptedData: null });
+    return res.json({ success: true });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to write vault.' });
+  }
+});
 
 // ─── Account meta API (email + login password per account) ───────────────────
 

@@ -240,161 +240,132 @@ async function generateTOTP(secret, algorithm = "SHA-1", digits = 6, period = 30
 
 // --- STATE MANAGEMENT ---
 
+const VAULT_ADMIN_PW_KEY = "vault_admin_password";
+
+// Legacy localStorage keys (cleared after shared-vault load to avoid split-brain)
+const LEGACY_STORAGE_KEYS = {
+  ENCRYPTED_VAULT: "vault_encrypted_data",
+  PLAIN_VAULT: "vault_plain_accounts"
+};
+
 const state = {
   accounts: [],
-  masterPassword: "",
-  isLocked: false,
+  adminPassword: "",
+  isLocked: true,
   searchQuery: "",
   activeCardMenuId: null,
   editingAccountId: null,
-  remoteEncryptedData: null,
   slots: {},           // { accountId: count }
   myWhatsApp: localStorage.getItem("my_whatsapp") || "",
   myClaims: {}         // { accountId: waNumber } — which accounts this device claimed
 };
 
-// LocalStorage Keys
-const STORAGE_KEYS = {
-  ENCRYPTED_VAULT: "vault_encrypted_data",
-  PLAIN_VAULT: "vault_plain_accounts"
-};
+function clearLegacyLocalVault() {
+  localStorage.removeItem(LEGACY_STORAGE_KEYS.ENCRYPTED_VAULT);
+  localStorage.removeItem(LEGACY_STORAGE_KEYS.PLAIN_VAULT);
+}
+
+function vaultHeaders(extra = {}) {
+  return { "x-admin-password": state.adminPassword, ...extra };
+}
 
 /**
- * Initializes state. Loads accounts from LocalStorage, prompts for master password if encrypted.
- */
-/**
- * Initializes state. Loads accounts from Server API with LocalStorage fallback.
+ * Shared vault: always starts locked. Unlock with ADMIN_PASSWORD (same as /admin, /saas).
  */
 async function initVault() {
-  try {
-    const response = await fetch('/api/vault');
-    if (!response.ok) throw new Error('API server returned error status');
-    
-    const payload = await response.json();
-    
-    if (payload.encryptedData) {
-      state.isLocked = true;
-      state.remoteEncryptedData = payload.encryptedData;
-      
-      // Mirror to local storage as backup
-      localStorage.setItem(STORAGE_KEYS.ENCRYPTED_VAULT, payload.encryptedData);
-      localStorage.removeItem(STORAGE_KEYS.PLAIN_VAULT);
-      
-      showLockScreen(true, "Unlock Vault", "Please enter your master password to unlock your 2FA accounts.");
-    } else if (payload.plainAccounts) {
-      state.isLocked = false;
-      state.remoteEncryptedData = null;
-      state.accounts = payload.plainAccounts;
-      
-      // Mirror to local storage as backup
-      localStorage.setItem(STORAGE_KEYS.PLAIN_VAULT, JSON.stringify(payload.plainAccounts));
-      localStorage.removeItem(STORAGE_KEYS.ENCRYPTED_VAULT);
-      
-      await loadSlots();
-      renderAccounts();
-      showLockScreen(false);
-    } else {
-      // Empty server vault - check if we can migrate from localStorage
-      const localEncrypted = localStorage.getItem(STORAGE_KEYS.ENCRYPTED_VAULT);
-      const localPlain = localStorage.getItem(STORAGE_KEYS.PLAIN_VAULT);
-      
-      if (localEncrypted) {
-        state.isLocked = true;
-        state.remoteEncryptedData = localEncrypted;
-        showLockScreen(true, "Unlock Vault", "Please enter your master password to unlock your 2FA accounts.");
-      } else if (localPlain) {
-        state.isLocked = false;
-        state.accounts = JSON.parse(localPlain);
-        renderAccounts();
-        showLockScreen(false);
-        // Sync the local plain accounts back to server
-        await saveVault();
-      } else {
-        // Entirely empty
-        state.isLocked = false;
-        state.accounts = [];
-        renderAccounts();
-        showLockScreen(false);
-      }
-    }
-  } catch (error) {
-    console.warn("Could not connect to API server. Falling back to local browser storage.", error);
-    showToast("Offline: Using local browser storage.", "error");
-    
-    // Offline / Standalone HTML fallback
-    const encryptedData = localStorage.getItem(STORAGE_KEYS.ENCRYPTED_VAULT);
-    const plainData = localStorage.getItem(STORAGE_KEYS.PLAIN_VAULT);
+  showLockScreen(true, "Vault Locked", "Enter the Admin Password to unlock the shared 2FA vault.");
 
-    if (encryptedData) {
-      state.isLocked = true;
-      showLockScreen(true, "Unlock Vault", "Please enter your master password to unlock your 2FA accounts.");
-    } else if (plainData) {
-      state.isLocked = false;
-      try {
-        state.accounts = JSON.parse(plainData);
-        renderAccounts();
-        showLockScreen(false);
-      } catch (e) {
-        showToast("Corrupted plain vault data. Resetting.", "error");
-        state.accounts = [];
-        renderAccounts();
-      }
-    } else {
-      state.isLocked = false;
-      state.accounts = [];
-      renderAccounts();
-      showLockScreen(false);
-    }
+  const saved = sessionStorage.getItem(VAULT_ADMIN_PW_KEY);
+  if (!saved) return;
+
+  const ok = await unlockWithPassword(saved, { silent: true });
+  if (!ok) {
+    sessionStorage.removeItem(VAULT_ADMIN_PW_KEY);
   }
 }
 
 /**
- * Saves current accounts state to server storage with LocalStorage backup mirror.
+ * Fetch shared vault with admin password. Returns true on success.
+ */
+async function unlockWithPassword(password, { silent = false } = {}) {
+  try {
+    const response = await fetch("/api/vault", {
+      headers: { "x-admin-password": password }
+    });
+
+    if (response.status === 401) {
+      if (!silent) showToast("Wrong admin password.", "error");
+      return false;
+    }
+    if (!response.ok) {
+      if (!silent) showToast("Could not load vault from server.", "error");
+      return false;
+    }
+
+    const payload = await response.json();
+    state.adminPassword = password;
+    sessionStorage.setItem(VAULT_ADMIN_PW_KEY, password);
+    state.isLocked = false;
+
+    let accounts = Array.isArray(payload.plainAccounts) ? payload.plainAccounts : [];
+
+    // One-time seed: empty server + leftover local plain vault → upload then clear local
+    if (accounts.length === 0) {
+      const localPlain = localStorage.getItem(LEGACY_STORAGE_KEYS.PLAIN_VAULT);
+      if (localPlain) {
+        try {
+          const localAccounts = JSON.parse(localPlain);
+          if (Array.isArray(localAccounts) && localAccounts.length > 0) {
+            accounts = localAccounts;
+            state.accounts = accounts;
+            await saveVault();
+            clearLegacyLocalVault();
+            if (!silent) showToast("Migrated local accounts to shared vault.");
+          }
+        } catch (_) { /* ignore corrupt local */ }
+      }
+    }
+
+    state.accounts = accounts;
+    clearLegacyLocalVault();
+    await loadSlots();
+    renderAccounts();
+    showLockScreen(false);
+    updateSecurityTabInfo();
+    if (!silent) showToast("Vault unlocked.");
+    return true;
+  } catch (error) {
+    console.warn("Vault unlock failed:", error);
+    if (!silent) showToast("Could not reach server. Try again.", "error");
+    return false;
+  }
+}
+
+/**
+ * Saves current accounts to the shared server vault (plain JSON only).
  */
 async function saveVault() {
-  let payload = {
-    encryptedData: null,
-    plainAccounts: null
-  };
-
-  if (state.masterPassword) {
-    try {
-      const plaintext = JSON.stringify(state.accounts);
-      const ciphertext = await encryptData(plaintext, state.masterPassword);
-      payload.encryptedData = ciphertext;
-      state.remoteEncryptedData = ciphertext;
-      
-      // Update local storage backup
-      localStorage.setItem(STORAGE_KEYS.ENCRYPTED_VAULT, ciphertext);
-      localStorage.removeItem(STORAGE_KEYS.PLAIN_VAULT);
-    } catch (e) {
-      console.error("Failed to encrypt vault:", e);
-      showToast("Error encrypting vault.", "error");
-      return;
-    }
-  } else {
-    payload.plainAccounts = state.accounts;
-    state.remoteEncryptedData = null;
-    
-    // Update local storage backup
-    localStorage.setItem(STORAGE_KEYS.PLAIN_VAULT, JSON.stringify(state.accounts));
-    localStorage.removeItem(STORAGE_KEYS.ENCRYPTED_VAULT);
+  if (!state.adminPassword || state.isLocked) {
+    showToast("Vault is locked. Unlock first.", "error");
+    return;
   }
 
   try {
-    const response = await fetch('/api/vault', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
+    const response = await fetch("/api/vault", {
+      method: "POST",
+      headers: vaultHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ plainAccounts: state.accounts })
     });
-    
-    if (!response.ok) throw new Error('API server failed to save data');
-    // Silent success — no toast needed for routine saves
+
+    if (response.status === 401) {
+      showToast("Session expired. Unlock again.", "error");
+      lockVault({ silent: true });
+      return;
+    }
+    if (!response.ok) throw new Error("API server failed to save data");
   } catch (error) {
-    console.warn("Could not sync vault with server. Saved locally in browser.", error);
-    showToast("Offline: Saved locally to browser.", "error");
+    console.warn("Could not sync vault with server.", error);
+    showToast("Failed to save vault to server.", "error");
   }
 }
 
@@ -544,19 +515,26 @@ async function updateAllTokens() {
 /**
  * Lock Screen control
  */
-function showLockScreen(show, title = "Enter Master Password", desc = "") {
+function showLockScreen(show, title = "Vault Locked", desc = "Enter the Admin Password to unlock the shared 2FA vault.") {
   const lockScreen = document.getElementById("lock-screen");
   const mainApp = document.getElementById("main-app");
+  const lockBtn = document.getElementById("header-lock-btn");
   
   if (show) {
     lockScreen.style.display = "flex";
     mainApp.style.display = "none";
     document.getElementById("lock-title").textContent = title;
     document.getElementById("lock-desc").textContent = desc;
-    document.getElementById("master-password-input").focus();
+    const input = document.getElementById("admin-password-input");
+    if (input) {
+      input.value = "";
+      setTimeout(() => input.focus(), 50);
+    }
+    if (lockBtn) lockBtn.style.display = "none";
   } else {
     lockScreen.style.display = "none";
     mainApp.style.display = "flex";
+    if (lockBtn) lockBtn.style.display = "flex";
   }
 }
 
@@ -793,145 +771,58 @@ function handleSecretInput(event) {
   }
 }
 
-// --- MASTER PASSWORD & SECURITY ---
+// --- SHARED VAULT LOCK (admin password) ---
 
 /**
- * Set master password or change it
- */
-async function handleMasterPasswordSetup(event) {
-  event.preventDefault();
-  const currentPass = document.getElementById("setup-current-pw").value;
-  const newPass = document.getElementById("setup-new-pw").value;
-  const confirmPass = document.getElementById("setup-confirm-pw").value;
-
-  // If already encrypted, verify current password
-  const hasEncrypted = !!localStorage.getItem(STORAGE_KEYS.ENCRYPTED_VAULT);
-  if (hasEncrypted && state.masterPassword && currentPass !== state.masterPassword) {
-    showToast("Incorrect current password.", "error");
-    return;
-  }
-
-  if (newPass !== confirmPass) {
-    showToast("New passwords do not match.", "error");
-    return;
-  }
-
-  if (newPass.length < 6) {
-    showToast("Password must be at least 6 characters.", "error");
-    return;
-  }
-
-  // Update in-memory password
-  state.masterPassword = newPass;
-  await saveVault();
-  
-  // Clean inputs
-  document.getElementById("password-setup-form").reset();
-  closeModal("settings-modal");
-  updateSecurityTabInfo();
-  showToast("Master password set up successfully!");
-}
-
-/**
- * Disable Master Password (decrypt to plaintext storage)
- */
-async function handleDisableMasterPassword() {
-  const currentPass = prompt("Please enter your current Master Password to disable encryption:");
-  if (currentPass === null) return; // cancel
-
-  if (currentPass !== state.masterPassword) {
-    showToast("Incorrect password.", "error");
-    return;
-  }
-
-  // Clear master password state
-  state.masterPassword = "";
-  // Save plain vault
-  await saveVault();
-  // Clear encrypted record
-  localStorage.removeItem(STORAGE_KEYS.ENCRYPTED_VAULT);
-  
-  updateSecurityTabInfo();
-  showToast("Encryption disabled. Data stored in plaintext.");
-}
-
-/**
- * Submit Unlock Password
+ * Unlock form submit — same ADMIN_PASSWORD as /admin and /saas.
  */
 async function handleUnlockSubmit(event) {
   event.preventDefault();
-  const inputEl = document.getElementById("master-password-input");
-  const password = inputEl.value;
-
-  const encryptedData = state.remoteEncryptedData || localStorage.getItem(STORAGE_KEYS.ENCRYPTED_VAULT);
-  if (!encryptedData) {
-    showToast("No encrypted database found.", "error");
+  const inputEl = document.getElementById("admin-password-input");
+  const password = (inputEl && inputEl.value) || "";
+  if (!password) {
+    showToast("Enter the Admin Password.", "error");
     return;
   }
 
+  const btn = event.target.querySelector('button[type="submit"]');
+  if (btn) btn.disabled = true;
   try {
-    const decryptedText = await decryptData(encryptedData, password);
-    state.accounts = JSON.parse(decryptedText);
-    state.masterPassword = password;
-    state.isLocked = false;
-
-    showLockScreen(false);
-    await loadSlots();
-    renderAccounts();
-    updateSecurityTabInfo();
-    showToast("Vault unlocked successfully!");
-  } catch (err) {
-    console.error(err);
-    showToast("Incorrect password.", "error");
-    inputEl.value = "";
-    inputEl.focus();
+    const ok = await unlockWithPassword(password);
+    if (!ok && inputEl) {
+      inputEl.value = "";
+      inputEl.focus();
+    }
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
 /**
- * Lock the App manually
+ * Lock the vault: clear session password and return to lock screen.
  */
-function lockVault() {
-  if (!state.masterPassword) {
-    showToast("No master password is set. Enable it in Settings first.", "error");
-    return;
-  }
+function lockVault({ silent = false } = {}) {
   state.accounts = [];
-  state.masterPassword = "";
+  state.adminPassword = "";
   state.isLocked = true;
+  sessionStorage.removeItem(VAULT_ADMIN_PW_KEY);
   renderAccounts();
-  showLockScreen(true, "Vault Locked", "Unlock with your Master Password to access your accounts.");
-  showToast("Vault locked.");
+  showLockScreen(true, "Vault Locked", "Enter the Admin Password to unlock the shared 2FA vault.");
+  if (!silent) showToast("Vault locked.");
 }
 
 /**
- * Sync Security Tab Settings view
+ * Security tab: shared vault uses ADMIN_PASSWORD — no separate master-password encryption.
  */
 function updateSecurityTabInfo() {
   const statusText = document.getElementById("security-status-text");
-  const lockBtn = document.getElementById("header-lock-btn");
-  const disableBtn = document.getElementById("disable-pw-btn");
-  const currentPwGroup = document.getElementById("setup-current-pw-group");
-  const currentPwInput = document.getElementById("setup-current-pw");
-  const hasPassword = !!state.masterPassword;
-
-  if (hasPassword) {
-    statusText.textContent = "Enabled (Encrypted vault)";
-    statusText.style.color = "var(--success-color)";
-    lockBtn.style.display = "flex";
-    disableBtn.style.display = "block";
-    if (currentPwGroup) currentPwGroup.style.display = "flex";
-    if (currentPwInput) currentPwInput.required = true;
-  } else {
-    statusText.textContent = "Disabled (Plaintext storage)";
+  if (!statusText) return;
+  if (state.isLocked || !state.adminPassword) {
+    statusText.textContent = "Locked";
     statusText.style.color = "var(--danger-color)";
-    lockBtn.style.display = "none";
-    disableBtn.style.display = "none";
-    if (currentPwGroup) currentPwGroup.style.display = "none";
-    if (currentPwInput) {
-      currentPwInput.required = false;
-      currentPwInput.value = "";
-    }
+  } else {
+    statusText.textContent = "Unlocked (shared vault)";
+    statusText.style.color = "var(--success-color)";
   }
 }
 
@@ -1034,7 +925,6 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("acc-secret").addEventListener("input", handleSecretInput);
 
   // Master password setup form submit
-  document.getElementById("password-setup-form").addEventListener("submit", handleMasterPasswordSetup);
 
   // Export binding
   document.getElementById("export-btn").addEventListener("click", handleExport);
@@ -1064,11 +954,8 @@ document.addEventListener("DOMContentLoaded", () => {
     updateSecurityTabInfo();
   });
 
-  // Master Password Lock button
-  document.getElementById("header-lock-btn").addEventListener("click", lockVault);
-  
-  // Master Password setup disable action
-  document.getElementById("disable-pw-btn").addEventListener("click", handleDisableMasterPassword);
+  // Lock vault button
+  document.getElementById("header-lock-btn").addEventListener("click", () => lockVault());
 
   // Modals closing triggers
   document.querySelectorAll(".modal-close").forEach(btn => {
