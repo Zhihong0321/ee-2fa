@@ -348,7 +348,7 @@ async function unlockWithPassword(password, { silent = false } = {}) {
 /**
  * Saves current accounts to the shared server vault (plain JSON only).
  */
-async function saveVault() {
+async function saveVault(allowEmpty = false) {
   if (!state.adminPassword || state.isLocked) {
     showToast("Vault is locked. Unlock first.", "error");
     return;
@@ -358,7 +358,7 @@ async function saveVault() {
     const response = await fetch("/api/vault", {
       method: "POST",
       headers: vaultHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ plainAccounts: state.accounts })
+      body: JSON.stringify({ plainAccounts: state.accounts, allowEmpty: allowEmpty === true })
     });
 
     if (response.status === 401) {
@@ -749,7 +749,7 @@ function confirmDeleteAccount(id) {
   if (confirm(`Are you sure you want to delete ${acc.issuer || "Authenticator"} (${acc.email || "no email"})? This cannot be undone.`)) {
     state.accounts = state.accounts.filter(a => a.id !== id);
     renderAccounts();
-    saveVault();
+    saveVault(state.accounts.length === 0);
     showToast("Account deleted successfully");
   }
 }

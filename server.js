@@ -12,8 +12,13 @@ const PORT = process.env.PORT || 8000;
 // wiped on every redeploy — that is why SaaS cards can disappear after deploy.
 function resolveStorageDir() {
   if (process.env.STORAGE_DIR) return process.env.STORAGE_DIR;
-  if (process.env.STORAGE_PATH) return path.dirname(process.env.STORAGE_PATH);
+  // Railway sets this automatically when a volume is attached.
   if (process.env.RAILWAY_VOLUME_MOUNT_PATH) return process.env.RAILWAY_VOLUME_MOUNT_PATH;
+  // STORAGE_PATH may be a folder (/storage) or a file (/storage/vault.json).
+  if (process.env.STORAGE_PATH) {
+    const p = process.env.STORAGE_PATH;
+    return /\.[a-z0-9]+$/i.test(path.basename(p)) ? path.dirname(p) : p;
+  }
   for (const candidate of ['/storage', '/data']) {
     try {
       if (fs.existsSync(candidate)) return candidate;
@@ -23,11 +28,46 @@ function resolveStorageDir() {
 }
 
 const storageDir = resolveStorageDir();
-const storageIsEphemeral = path.resolve(storageDir).startsWith(path.resolve(__dirname));
 
 if (!fs.existsSync(storageDir)) {
   fs.mkdirSync(storageDir, { recursive: true });
 }
+
+// Storage only counts as persistent if it is a REAL separate mount (a volume):
+// not inside the app folder, not the filesystem root, and on a different device
+// than "/" (the container disk that is wiped on every deploy).
+function detectPersistence() {
+  const resolved = path.resolve(storageDir);
+  if (resolved === '/' || resolved.startsWith(path.resolve(__dirname))) {
+    return { persistent: false, reason: 'storage is on the container disk, which is wiped on every deploy' };
+  }
+  try {
+    const sameDeviceAsRoot = fs.statSync(resolved).dev === fs.statSync('/').dev;
+    const isRailwayVolume = process.env.RAILWAY_VOLUME_MOUNT_PATH &&
+      path.resolve(process.env.RAILWAY_VOLUME_MOUNT_PATH) === resolved;
+    if (sameDeviceAsRoot && !isRailwayVolume) {
+      return { persistent: false, reason: 'storage is not a separate mounted volume (same disk as the container)' };
+    }
+  } catch (e) {
+    return { persistent: false, reason: 'cannot inspect storage: ' + e.message };
+  }
+  return { persistent: true, reason: 'storage is on a mounted volume' };
+}
+const persistence = detectPersistence();
+const storageIsEphemeral = !persistence.persistent;
+
+// Boot counter stored in the storage dir. If "boots" keeps growing across
+// deploys while "firstBoot" stays the same, storage really survives redeploys.
+const bootFile = path.join(storageDir, '.boot.json');
+let bootInfo = { firstBoot: new Date().toISOString(), boots: 0 };
+try {
+  if (fs.existsSync(bootFile)) bootInfo = { ...bootInfo, ...JSON.parse(fs.readFileSync(bootFile, 'utf8')) };
+  bootInfo.boots = (bootInfo.boots || 0) + 1;
+  bootInfo.lastBoot = new Date().toISOString();
+  fs.writeFileSync(bootFile, JSON.stringify(bootInfo, null, 2));
+} catch (_) { /* health will report unwritable */ }
+
+const backupsDir = path.join(storageDir, 'backups');
 
 const storageFile  = path.join(storageDir, 'vault.json');
 const slotsFile    = path.join(storageDir, 'slots.json');
@@ -51,9 +91,25 @@ function readJSON(file, fallback = {}) {
   catch (e) { return fallback; }
 }
 
+function snapshotFile(file) {
+  try {
+    if (!fs.existsSync(file)) return;
+    const base = path.basename(file, '.json');
+    if (!['vault', 'saas'].includes(base)) return;
+    if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    fs.copyFileSync(file, path.join(backupsDir, `${base}-${stamp}.json`));
+    const mine = fs.readdirSync(backupsDir).filter(f => f.startsWith(base + '-')).sort();
+    for (const old of mine.slice(0, Math.max(0, mine.length - 50))) {
+      try { fs.unlinkSync(path.join(backupsDir, old)); } catch (_) {}
+    }
+  } catch (_) { /* backups are best effort */ }
+}
+
 function writeJSON(file, data) {
   const dir = path.dirname(file);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  snapshotFile(file);
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
   fs.renameSync(tmp, file);
@@ -96,10 +152,12 @@ function normalizeSaasCard(body, existing = null) {
 }
 
 // ─── Health check (public) ───────────────────────────────────────────────────
+// ready is true ONLY when storage is a real mounted volume and writable.
 app.get('/health', (req, res) => {
   let writable = false;
   let saasReadable = false;
   let saasCount = 0;
+  let vaultCount = 0;
   let error = null;
   try {
     const probe = path.join(storageDir, '.healthwrite');
@@ -116,21 +174,29 @@ app.get('/health', (req, res) => {
   } catch (e) {
     error = error || e.message;
   }
-  const ready = Boolean(writable && !storageIsEphemeral);
+  try {
+    const v = readJSON(storageFile, {});
+    vaultCount = Array.isArray(v.plainAccounts) ? v.plainAccounts.length : 0;
+  } catch (_) {}
+  const ready = Boolean(writable && persistence.persistent);
   const body = {
-    status: ready ? 'ok' : 'degraded',
+    status: ready ? 'ok' : 'NOT_SAFE',
     ready,
+    persistent: persistence.persistent,
     ephemeral: storageIsEphemeral,
+    reason: persistence.reason,
     storageDir,
     writable,
     saasReadable,
     saasCount,
+    vaultCount,
+    boots: bootInfo.boots,
+    firstBoot: bootInfo.firstBoot,
     uptimeSec: Math.round(process.uptime()),
     ...(error ? { error } : {})
   };
   return res.status(ready ? 200 : 503).json(body);
 });
-
 
 
 // ─── Vault decryption (mirrors Web Crypto logic in app.js) ───────────────────
@@ -292,6 +358,12 @@ app.post('/api/vault', requireAdmin, (req, res) => {
     const plainAccounts = req.body && req.body.plainAccounts;
     if (!Array.isArray(plainAccounts))
       return res.status(400).json({ error: 'Invalid payload structure.' });
+    // Never let an empty list silently erase existing accounts.
+    if (plainAccounts.length === 0 && !(req.body && req.body.allowEmpty === true)) {
+      const current = readJSON(storageFile, {});
+      if (Array.isArray(current.plainAccounts) && current.plainAccounts.length > 0)
+        return res.status(409).json({ error: 'Refusing to replace existing accounts with an empty list.' });
+    }
     writeJSON(storageFile, { plainAccounts, encryptedData: null });
     return res.json({ success: true });
   } catch (e) {
@@ -467,7 +539,7 @@ app.get('/api/storage-status', requireAdmin, (req, res) => {
     vaultExists: fs.existsSync(storageFile),
     saasExists: fs.existsSync(saasFile),
     hint: storageIsEphemeral
-      ? 'Storage is inside the app image and is wiped on redeploy. On Railway: add a Volume, mount it (e.g. /storage), and set STORAGE_DIR=/storage (or STORAGE_PATH=/storage/vault.json).'
+      ? 'NOT SAFE: ' + persistence.reason + '. On Railway attach a Volume and set STORAGE_DIR to its mount path (e.g. /storage).'
       : 'Storage is on a mounted/persistent path.'
   });
 });
@@ -586,7 +658,7 @@ app.use((err, req, res, next) => {
 // ─── Start ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`Eternalgy Digital Asset Server running on port ${PORT}`);
-  console.log(`Storage dir:   ${storageDir}${storageIsEphemeral ? '  ⚠ EPHEMERAL (wiped on redeploy)' : '  ✓ persistent path'}`);
+  console.log(`Storage dir:   ${storageDir}${storageIsEphemeral ? '  ⚠ NOT PERSISTENT: ' + persistence.reason : '  ✓ mounted volume'}`);
   console.log(`Vault:         ${storageFile}`);
   console.log(`Slots:         ${slotsFile}`);
   console.log(`Accounts meta: ${accountsFile}`);
