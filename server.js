@@ -23,6 +23,7 @@ if (!fs.existsSync(storageDir)) {
 const storageFile  = path.join(storageDir, 'vault.json');
 const slotsFile    = path.join(storageDir, 'slots.json');
 const accountsFile = path.join(storageDir, 'accounts_meta.json'); // stores email+password per accountId
+const saasFile      = path.join(storageDir, 'saas.json');         // SaaS subscription cards
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const ADMIN_PASSWORD  = process.env.ADMIN_PASSWORD;
@@ -48,6 +49,25 @@ const readSlots        = () => readJSON(slotsFile, {});
 const writeSlots       = (d) => writeJSON(slotsFile, d);
 const readAccountsMeta = () => readJSON(accountsFile, {});
 const writeAccountsMeta= (d) => writeJSON(accountsFile, d);
+const readSaas          = () => readJSON(saasFile, []);
+const writeSaas         = (d) => writeJSON(saasFile, d);
+
+function normalizeSaasCard(body, existing = null) {
+  const name = (body.name || '').trim();
+  if (!name) return { error: 'SaaS name is required.' };
+  return {
+    id: existing?.id || crypto.randomUUID(),
+    name,
+    url: (body.url || '').trim(),
+    description: (body.description || '').trim(),
+    username: (body.username || '').trim(),
+    credential: (body.credential || '').trim(),
+    accessGuide: (body.accessGuide || '').trim(),
+    createdAt: existing?.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+}
+
 
 // ─── Vault decryption (mirrors Web Crypto logic in app.js) ───────────────────
 // Layout: 16 bytes salt | 12 bytes IV | ciphertext (AES-256-GCM)
@@ -316,6 +336,41 @@ app.delete('/api/admin/slots/clear/:accountId', requireAdmin, (req, res) => {
   return res.json({ success: true });
 });
 
+
+// ─── SaaS subscription cards API (admin only) ────────────────────────────────
+
+app.get('/api/saas', requireAdmin, (req, res) => {
+  return res.json(readSaas());
+});
+
+app.post('/api/saas', requireAdmin, (req, res) => {
+  const card = normalizeSaasCard(req.body);
+  if (card.error) return res.status(400).json({ error: card.error });
+  const list = readSaas();
+  list.push(card);
+  writeSaas(list);
+  return res.json(card);
+});
+
+app.put('/api/saas/:id', requireAdmin, (req, res) => {
+  const list = readSaas();
+  const idx = list.findIndex(c => c.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Card not found.' });
+  const card = normalizeSaasCard(req.body, list[idx]);
+  if (card.error) return res.status(400).json({ error: card.error });
+  list[idx] = card;
+  writeSaas(list);
+  return res.json(card);
+});
+
+app.delete('/api/saas/:id', requireAdmin, (req, res) => {
+  const list = readSaas();
+  const next = list.filter(c => c.id !== req.params.id);
+  if (next.length === list.length) return res.status(404).json({ error: 'Card not found.' });
+  writeSaas(next);
+  return res.json({ success: true });
+});
+
 // ─── Page routes ─────────────────────────────────────────────────────────────
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'admin.html'));
@@ -325,10 +380,15 @@ app.get('/learn', (req, res) => {
   res.sendFile(path.join(__dirname, 'learn.html'));
 });
 
+app.get('/saas', (req, res) => {
+  res.sendFile(path.join(__dirname, 'saas.html'));
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`Eternalgy AI Kindergarten Server running on port ${PORT}`);
   console.log(`Vault:         ${storageFile}`);
   console.log(`Slots:         ${slotsFile}`);
   console.log(`Accounts meta: ${accountsFile}`);
+  console.log(`SaaS cards:    ${saasFile}`);
 });

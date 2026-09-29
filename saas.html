@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eternalgy AI Kindergarten — SaaS Subscriptions</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .saas-wrap {
+      width: 100%;
+      max-width: 1100px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .saas-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .saas-toolbar .search-container {
+      flex: 1;
+      min-width: 220px;
+      max-width: 420px;
+    }
+
+    .saas-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.25rem;
+    }
+
+    .saas-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 1.35rem 1.4rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+      transition: var(--transition-smooth);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .saas-card:hover {
+      border-color: var(--card-hover-border);
+      box-shadow: var(--glow-cyan);
+    }
+
+    .saas-card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+
+    .saas-card-title {
+      font-size: 1.15rem;
+      font-weight: 650;
+      line-height: 1.25;
+    }
+
+    .saas-card-url a {
+      color: var(--accent-cyan);
+      font-size: 0.82rem;
+      text-decoration: none;
+      word-break: break-all;
+    }
+
+    .saas-card-url a:hover { text-decoration: underline; }
+
+    .saas-card-desc {
+      color: var(--text-secondary);
+      font-size: 0.88rem;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+
+    .saas-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .saas-field label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.55px;
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+
+    .saas-field .value {
+      font-size: 0.9rem;
+      font-family: var(--font-mono);
+      word-break: break-all;
+    }
+
+    .saas-field .value.notes {
+      font-family: var(--font-sans);
+      white-space: pre-wrap;
+      color: var(--text-secondary);
+    }
+
+    .saas-card-actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.25rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .saas-card-actions .btn {
+      flex: 1;
+      justify-content: center;
+      font-size: 0.8rem;
+      padding: 0.45rem 0.7rem;
+    }
+
+    .empty-state {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 3rem 1.5rem;
+      background: var(--card-bg);
+      border: 1px dashed var(--card-border);
+      border-radius: 20px;
+      color: var(--text-secondary);
+    }
+
+    .badge-saas {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: rgba(0, 229, 255, 0.12);
+      border: 1px solid rgba(0, 229, 255, 0.3);
+      color: var(--accent-cyan);
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+    }
+
+    #saas-panel { display: none; width: 100%; }
+    #saas-login { display: flex; }
+
+    .reveal-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .reveal-row .value { flex: 1; }
+
+    .btn-tiny {
+      font-size: 0.7rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 6px;
+      border: 1px solid var(--card-border);
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-family: var(--font-sans);
+      font-weight: 600;
+    }
+
+    .btn-tiny:hover {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    .form-stack { display: flex; flex-direction: column; gap: 0.9rem; }
+    .form-stack label {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.35rem;
+      font-weight: 600;
+    }
+    .form-stack textarea.form-input {
+      min-height: 88px;
+      resize: vertical;
+      font-family: var(--font-sans);
+    }
+  </style>
+</head>
+<body>
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Login -->
+  <div id="saas-login" class="modal-overlay" style="position:fixed;display:flex;">
+    <div class="lock-screen-container">
+      <div class="lock-icon-container">
+        <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+        </svg>
+      </div>
+      <div class="lock-screen-text">
+        <h2>SaaS Manager</h2>
+        <p>Enter the admin password to manage subscription cards.</p>
+      </div>
+      <form id="saas-login-form" class="lock-screen-form">
+        <input type="password" id="saas-pw-input" class="form-input"
+          placeholder="Admin Password" required autocomplete="current-password">
+        <p id="saas-login-error" style="color:var(--danger-color);font-size:0.82rem;display:none;">
+          Incorrect password.
+        </p>
+        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:0.85rem;">
+          Unlock
+        </button>
+        <a href="/" style="font-size:0.8rem;color:var(--text-secondary);text-align:center;margin-top:0.25rem;">
+          ← Back to Vault
+        </a>
+      </form>
+    </div>
+  </div>
+
+  <!-- Panel -->
+  <div id="saas-panel">
+    <div class="saas-wrap">
+      <header>
+        <div class="brand">
+          <div class="brand-icon">S</div>
+          <div class="brand-title">
+            <h1>Eternalgy AI Kindergarten</h1>
+            <p>SaaS Subscriptions</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <span class="badge-saas">By Card</span>
+          <a href="/admin" class="btn btn-icon" title="Admin">
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+            </svg>
+          </a>
+          <a href="/" class="btn btn-icon" title="Back to Vault">
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+            </svg>
+          </a>
+        </div>
+      </header>
+
+      <div class="saas-toolbar">
+        <div class="search-container" style="position:relative;">
+          <svg class="search-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="position:absolute;left:0.9rem;top:50%;transform:translateY(-50%);opacity:0.5;">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          <input type="search" id="saas-search" class="form-input" placeholder="Search SaaS cards…"
+            style="padding-left:2.5rem;">
+        </div>
+        <button class="btn btn-primary" id="add-card-btn">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+          </svg>
+          Add Card
+        </button>
+      </div>
+
+      <div class="saas-grid" id="saas-grid"></div>
+    </div>
+  </div>
+
+  <!-- Add / Edit modal -->
+  <div id="saas-modal" class="modal-overlay">
+    <div class="modal-content" style="max-width:520px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-title">Add SaaS Card</h3>
+        <button class="modal-close" id="modal-close" type="button" aria-label="Close">&times;</button>
+      </div>
+      <form id="saas-form" class="modal-body form-stack">
+        <input type="hidden" id="card-id">
+        <div>
+          <label for="field-name">SaaS Name *</label>
+          <input class="form-input" id="field-name" required placeholder="e.g. Notion">
+        </div>
+        <div>
+          <label for="field-url">URL</label>
+          <input class="form-input" id="field-url" type="url" placeholder="https://…">
+        </div>
+        <div>
+          <label for="field-description">Description</label>
+          <textarea class="form-input" id="field-description" placeholder="What this SaaS is for"></textarea>
+        </div>
+        <div>
+          <label for="field-username">Username</label>
+          <input class="form-input" id="field-username" placeholder="login / email">
+        </div>
+        <div>
+          <label for="field-credential">Access Credential</label>
+          <input class="form-input" id="field-credential" placeholder="password / API key / token">
+        </div>
+        <div>
+          <label for="field-guide">Access Guide (remarks)</label>
+          <textarea class="form-input" id="field-guide" placeholder="How to sign in, 2FA steps, notes…"></textarea>
+        </div>
+        <div class="modal-footer" style="padding:0;margin-top:0.5rem;">
+          <button type="button" class="btn" id="modal-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="modal-save">Save Card</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const SAAS_PW_KEY = 'saas_session_pw';
+    let adminPassword = '';
+    let cards = [];
+    let revealMap = {};
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type === 'error' ? 'toast-error' : ''}`;
+      toast.innerHTML = `<span class="toast-icon">${type === 'success' ? '✓' : '✕'}</span><span>${message}</span>`;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(20px)';
+        toast.style.transition = 'all 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    function escapeHtml(str) {
+      const d = document.createElement('div');
+      d.textContent = str || '';
+      return d.innerHTML;
+    }
+
+    function authHeaders(extra = {}) {
+      return { 'x-admin-password': adminPassword, ...extra };
+    }
+
+    function showPanel() {
+      document.getElementById('saas-login').style.display = 'none';
+      document.getElementById('saas-panel').style.display = 'flex';
+      document.getElementById('saas-panel').style.justifyContent = 'center';
+    }
+
+    function logout() {
+      adminPassword = '';
+      sessionStorage.removeItem(SAAS_PW_KEY);
+      document.getElementById('saas-panel').style.display = 'none';
+      document.getElementById('saas-login').style.display = 'flex';
+      document.getElementById('saas-pw-input').value = '';
+      document.getElementById('saas-login-error').style.display = 'none';
+    }
+
+    async function tryLogin(password) {
+      const res = await fetch('/api/saas', { headers: { 'x-admin-password': password } });
+      if (res.status === 401) return false;
+      if (!res.ok) throw new Error('login failed');
+      adminPassword = password;
+      sessionStorage.setItem(SAAS_PW_KEY, password);
+      cards = await res.json();
+      showPanel();
+      renderCards();
+      return true;
+    }
+
+    async function loadCards() {
+      const res = await fetch('/api/saas', { headers: authHeaders() });
+      if (res.status === 401) { logout(); return; }
+      if (!res.ok) throw new Error('load failed');
+      cards = await res.json();
+      renderCards();
+    }
+
+    function filteredCards() {
+      const q = (document.getElementById('saas-search').value || '').trim().toLowerCase();
+      if (!q) return cards;
+      return cards.filter(c =>
+        [c.name, c.url, c.description, c.username, c.accessGuide]
+          .join(' ')
+          .toLowerCase()
+          .includes(q)
+      );
+    }
+
+    function renderCards() {
+      const grid = document.getElementById('saas-grid');
+      const list = filteredCards();
+      if (list.length === 0) {
+        grid.innerHTML = `<div class="empty-state">
+          <p style="font-size:1.05rem;margin-bottom:0.4rem;color:var(--text-primary);">No SaaS cards yet</p>
+          <p>Add a card for each subscription you manage.</p>
+        </div>`;
+        return;
+      }
+
+      grid.innerHTML = list.map(c => {
+        const revealed = !!revealMap[c.id];
+        const credDisplay = c.credential
+          ? (revealed ? escapeHtml(c.credential) : '••••••••••••')
+          : '—';
+        const urlHtml = c.url
+          ? `<div class="saas-card-url"><a href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(c.url)}</a></div>`
+          : '';
+        return `
+          <article class="saas-card" data-id="${escapeHtml(c.id)}">
+            <div class="saas-card-top">
+              <div>
+                <div class="saas-card-title">${escapeHtml(c.name)}</div>
+                ${urlHtml}
+              </div>
+            </div>
+            ${c.description ? `<p class="saas-card-desc">${escapeHtml(c.description)}</p>` : ''}
+            <div class="saas-field">
+              <label>Username</label>
+              <div class="value">${escapeHtml(c.username || '—')}</div>
+            </div>
+            <div class="saas-field">
+              <label>Access Credential</label>
+              <div class="reveal-row">
+                <div class="value" id="cred-${escapeHtml(c.id)}">${credDisplay}</div>
+                ${c.credential ? `<button type="button" class="btn-tiny" onclick="toggleReveal('${escapeHtml(c.id)}')">${revealed ? 'Hide' : 'Show'}</button>
+                <button type="button" class="btn-tiny" onclick="copyCred('${escapeHtml(c.id)}')">Copy</button>` : ''}
+              </div>
+            </div>
+            <div class="saas-field">
+              <label>Access Guide</label>
+              <div class="value notes">${escapeHtml(c.accessGuide || '—')}</div>
+            </div>
+            <div class="saas-card-actions">
+              <button class="btn" type="button" onclick="openEdit('${escapeHtml(c.id)}')">Edit</button>
+              <button class="btn" type="button" style="color:var(--danger-color);border-color:rgba(249,115,22,0.3);"
+                onclick="deleteCard('${escapeHtml(c.id)}')">Delete</button>
+            </div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    function toggleReveal(id) {
+      revealMap[id] = !revealMap[id];
+      renderCards();
+    }
+
+    async function copyCred(id) {
+      const card = cards.find(c => c.id === id);
+      if (!card?.credential) return;
+      try {
+        await navigator.clipboard.writeText(card.credential);
+        showToast('Credential copied.');
+      } catch {
+        showToast('Could not copy.', 'error');
+      }
+    }
+
+    function openModal(card = null) {
+      document.getElementById('modal-title').textContent = card ? 'Edit SaaS Card' : 'Add SaaS Card';
+      document.getElementById('card-id').value = card?.id || '';
+      document.getElementById('field-name').value = card?.name || '';
+      document.getElementById('field-url').value = card?.url || '';
+      document.getElementById('field-description').value = card?.description || '';
+      document.getElementById('field-username').value = card?.username || '';
+      document.getElementById('field-credential').value = card?.credential || '';
+      document.getElementById('field-guide').value = card?.accessGuide || '';
+      document.getElementById('saas-modal').classList.add('active');
+      document.getElementById('field-name').focus();
+    }
+
+    function closeModal() {
+      document.getElementById('saas-modal').classList.remove('active');
+    }
+
+    function openEdit(id) {
+      const card = cards.find(c => c.id === id);
+      if (card) openModal(card);
+    }
+
+    async function deleteCard(id) {
+      const card = cards.find(c => c.id === id);
+      if (!card) return;
+      if (!confirm(`Delete “${card.name}”?`)) return;
+      const res = await fetch(`/api/saas/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: authHeaders()
+      });
+      if (res.status === 401) { logout(); return; }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.error || 'Delete failed.', 'error');
+        return;
+      }
+      showToast('Card deleted.');
+      await loadCards();
+    }
+
+    document.getElementById('add-card-btn').addEventListener('click', () => openModal());
+    document.getElementById('modal-close').addEventListener('click', closeModal);
+    document.getElementById('modal-cancel').addEventListener('click', closeModal);
+    document.getElementById('saas-modal').addEventListener('click', (e) => {
+      if (e.target.id === 'saas-modal') closeModal();
+    });
+    document.getElementById('saas-search').addEventListener('input', renderCards);
+
+    document.getElementById('saas-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('card-id').value;
+      const payload = {
+        name: document.getElementById('field-name').value,
+        url: document.getElementById('field-url').value,
+        description: document.getElementById('field-description').value,
+        username: document.getElementById('field-username').value,
+        credential: document.getElementById('field-credential').value,
+        accessGuide: document.getElementById('field-guide').value
+      };
+      const res = await fetch(id ? `/api/saas/${encodeURIComponent(id)}` : '/api/saas', {
+        method: id ? 'PUT' : 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(payload)
+      });
+      if (res.status === 401) { logout(); return; }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(data.error || 'Save failed.', 'error');
+        return;
+      }
+      closeModal();
+      showToast(id ? 'Card updated.' : 'Card added.');
+      await loadCards();
+    });
+
+    document.getElementById('saas-login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const pw = document.getElementById('saas-pw-input').value;
+      const err = document.getElementById('saas-login-error');
+      err.style.display = 'none';
+      try {
+        const ok = await tryLogin(pw);
+        if (!ok) err.style.display = 'block';
+      } catch {
+        showToast('Login failed. Is the server running?', 'error');
+      }
+    });
+
+    (async () => {
+      const saved = sessionStorage.getItem(SAAS_PW_KEY);
+      if (saved) {
+        try {
+          if (await tryLogin(saved)) return;
+        } catch (_) {}
+        sessionStorage.removeItem(SAAS_PW_KEY);
+      }
+    })();
+  </script>
+</body>
+</html>
