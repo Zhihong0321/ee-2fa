@@ -309,7 +309,7 @@ async function unlockWithPassword(password, { silent = false } = {}) {
 
     let accounts = Array.isArray(payload.plainAccounts) ? payload.plainAccounts : [];
 
-    // One-time seed: empty server + leftover local plain vault → upload then clear local
+    // Recover: empty server + leftover local vault → restore to shared server (keep local until confirmed)
     if (accounts.length === 0) {
       const localPlain = localStorage.getItem(LEGACY_STORAGE_KEYS.PLAIN_VAULT);
       if (localPlain) {
@@ -319,15 +319,19 @@ async function unlockWithPassword(password, { silent = false } = {}) {
             accounts = localAccounts;
             state.accounts = accounts;
             await saveVault();
-            clearLegacyLocalVault();
-            if (!silent) showToast("Migrated local accounts to shared vault.");
+            if (!silent) showToast("Restored accounts from this browser to the shared vault.");
           }
         } catch (_) { /* ignore corrupt local */ }
+      }
+      const localEnc = localStorage.getItem(LEGACY_STORAGE_KEYS.ENCRYPTED_VAULT);
+      if (accounts.length === 0 && localEnc && !silent) {
+        showToast("Found an old encrypted local vault. Import a backup JSON if you have one — local encryption keys were browser-only.", "error");
       }
     }
 
     state.accounts = accounts;
-    clearLegacyLocalVault();
+    // NEVER wipe legacy local vault unless we successfully migrated non-empty data above.
+    // Clearing here destroyed user data when the server vault was empty.
     await loadSlots();
     renderAccounts();
     showLockScreen(false);
