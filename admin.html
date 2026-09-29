@@ -593,12 +593,58 @@
       showToast('Data refreshed.');
     });
 
-    // ── Auto-login on page load ────────────────────────────────────────────────
-    (async () => {
-      adminPassword = '@eternalgy9999';
+    // ── Login / session ────────────────────────────────────────────────────────
+    function showAdminPanel() {
       document.getElementById('admin-login').style.display = 'none';
       document.getElementById('admin-panel').style.display = 'flex';
+    }
+
+    function logout() {
+      adminPassword = '';
+      sessionStorage.removeItem(ADMIN_PW_KEY);
+      document.getElementById('admin-panel').style.display = 'none';
+      document.getElementById('admin-login').style.display = 'flex';
+      document.getElementById('admin-pw-input').value = '';
+      document.getElementById('admin-login-error').style.display = 'none';
+    }
+
+    async function tryAdminLogin(password) {
+      const res = await fetch('/api/admin/slots', {
+        headers: { 'x-admin-password': password }
+      });
+      if (res.status === 401) return false;
+      if (!res.ok) throw new Error('login check failed');
+      adminPassword = password;
+      sessionStorage.setItem(ADMIN_PW_KEY, password);
+      showAdminPanel();
       await loadData();
+      return true;
+    }
+
+    document.getElementById('admin-login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const pw = document.getElementById('admin-pw-input').value;
+      const err = document.getElementById('admin-login-error');
+      err.style.display = 'none';
+      try {
+        const ok = await tryAdminLogin(pw);
+        if (!ok) err.style.display = 'block';
+      } catch (ex) {
+        showToast('Login failed. Is the server running?', 'error');
+      }
+    });
+
+    (async () => {
+      const saved = sessionStorage.getItem(ADMIN_PW_KEY);
+      if (saved) {
+        try {
+          const ok = await tryAdminLogin(saved);
+          if (ok) return;
+        } catch (_) { /* fall through to login screen */ }
+        sessionStorage.removeItem(ADMIN_PW_KEY);
+      }
+      document.getElementById('admin-login').style.display = 'flex';
+      document.getElementById('admin-panel').style.display = 'none';
     })();
   </script>
 </body>
