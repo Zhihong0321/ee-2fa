@@ -188,6 +188,103 @@
       resize: vertical;
       font-family: var(--font-sans);
     }
+
+    /* ── Guide sections & image galleries ── */
+    .guide-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      padding: 0.7rem 0.8rem;
+      border: 1px solid rgba(0, 229, 255, 0.14);
+      border-radius: 12px;
+      background: rgba(0, 229, 255, 0.03);
+    }
+    .guide-section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .guide-section-head .guide-title {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.55px;
+      color: var(--accent-cyan);
+      font-weight: 700;
+    }
+    .guide-gallery {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .guide-gallery:empty { display: none; }
+    .thumb {
+      position: relative;
+      width: 72px;
+      height: 72px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid var(--card-border);
+      background: rgba(255,255,255,0.04);
+      cursor: zoom-in;
+      flex: 0 0 auto;
+    }
+    .thumb:hover { border-color: var(--accent-cyan); }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .thumb.loading::after {
+      content: '…';
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-secondary);
+    }
+    .thumb .thumb-del {
+      position: absolute;
+      top: 2px; right: 2px;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(0,0,0,0.72);
+      color: #fff;
+      font-size: 13px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0;
+    }
+    .thumb .thumb-del:hover { background: var(--danger-color); }
+    .thumb.pending { border-style: dashed; }
+    .guide-hint { font-size: 0.72rem; color: var(--text-secondary); }
+
+    #img-lightbox {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.88);
+      display: none;
+      align-items: center; justify-content: center;
+      z-index: 5000;
+      cursor: zoom-out;
+      padding: 1.5rem;
+    }
+    #img-lightbox.active { display: flex; }
+    #img-lightbox img {
+      max-width: 100%; max-height: 100%;
+      border-radius: 10px;
+      box-shadow: var(--glow-cyan);
+    }
+    #img-lightbox .lb-close {
+      position: absolute; top: 1rem; right: 1.25rem;
+      color: #fff; font-size: 2rem; background: none; border: none; cursor: pointer;
+    }
+    #img-lightbox .lb-nav {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      color: #fff; font-size: 2.2rem; background: rgba(0,0,0,0.4);
+      border: none; cursor: pointer; padding: 0.3rem 0.8rem; border-radius: 10px;
+    }
+    #img-lightbox .lb-prev { left: 1rem; }
+    #img-lightbox .lb-next { right: 1rem; }
+    #img-lightbox .lb-cap {
+      position: absolute; bottom: 1rem; left: 0; right: 0;
+      text-align: center; color: var(--text-secondary); font-size: 0.8rem;
+    }
   </style>
 </head>
 <body>
@@ -304,16 +401,38 @@
           <label for="field-credential">Access Credential</label>
           <input class="form-input" id="field-credential" placeholder="password / API key / token">
         </div>
-        <div>
-          <label for="field-guide">Access Guide (remarks)</label>
+        <div class="guide-section" data-kind="login" id="modal-sec-login">
+          <div class="guide-section-head">
+            <label for="field-guide" class="guide-title" style="margin:0;">How to Login</label>
+            <button type="button" class="btn-tiny" data-action="add-images" data-kind="login">+ Add images</button>
+          </div>
           <textarea class="form-input" id="field-guide" placeholder="How to sign in, 2FA steps, notes…"></textarea>
+          <div class="guide-gallery" id="modal-gallery-login"></div>
         </div>
+        <div class="guide-section" data-kind="bill" id="modal-sec-bill">
+          <div class="guide-section-head">
+            <label for="field-bill-guide" class="guide-title" style="margin:0;">How to Pay Bill</label>
+            <button type="button" class="btn-tiny" data-action="add-images" data-kind="bill">+ Add images</button>
+          </div>
+          <textarea class="form-input" id="field-bill-guide" placeholder="Where and how to pay the invoice / subscription bill…"></textarea>
+          <div class="guide-gallery" id="modal-gallery-bill"></div>
+        </div>
+        <div class="guide-hint">Tip: select several images at once, or paste screenshots (Ctrl/Cmd+V) while this window is open. New cards upload images right after saving.</div>
         <div class="modal-footer" style="padding:0;margin-top:0.5rem;">
           <button type="button" class="btn" id="modal-cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" id="modal-save">Save Card</button>
         </div>
       </form>
     </div>
+  </div>
+
+  <input type="file" id="img-file-input" accept="image/jpeg,image/png,image/webp,image/gif,image/*" multiple style="display:none;">
+  <div id="img-lightbox">
+    <button type="button" class="lb-close" aria-label="Close">&times;</button>
+    <button type="button" class="lb-nav lb-prev" aria-label="Previous">&#8249;</button>
+    <img id="lb-img" alt="">
+    <button type="button" class="lb-nav lb-next" aria-label="Next">&#8250;</button>
+    <div class="lb-cap" id="lb-cap"></div>
   </div>
 
   <script>
@@ -386,7 +505,7 @@
       const q = (document.getElementById('saas-search').value || '').trim().toLowerCase();
       if (!q) return cards;
       return cards.filter(c =>
-        [c.name, c.url, c.description, c.username, c.accessGuide]
+        [c.name, c.url, c.description, c.username, c.accessGuide, c.billGuide]
           .join(' ')
           .toLowerCase()
           .includes(q)
@@ -433,10 +552,8 @@
                 <button type="button" class="btn-tiny" onclick="copyCred('${escapeHtml(c.id)}')">Copy</button>` : ''}
               </div>
             </div>
-            <div class="saas-field">
-              <label>Access Guide</label>
-              <div class="value notes">${escapeHtml(c.accessGuide || '—')}</div>
-            </div>
+            ${guideSectionHtml(c, 'login')}
+            ${guideSectionHtml(c, 'bill')}
             <div class="saas-card-actions">
               <button class="btn" type="button" onclick="openEdit('${escapeHtml(c.id)}')">Edit</button>
               <button class="btn" type="button" style="color:var(--danger-color);border-color:rgba(249,115,22,0.3);"
@@ -445,7 +562,276 @@
           </article>
         `;
       }).join('');
+      hydrateImages(grid);
     }
+
+    function guideSectionHtml(c, kind) {
+      const title = kind === 'login' ? 'How to Login' : 'How to Pay Bill';
+      const text = kind === 'login' ? c.accessGuide : c.billGuide;
+      const imgs = (kind === 'login' ? c.loginImages : c.billImages) || [];
+      return `
+        <div class="guide-section" data-kind="${kind}">
+          <div class="guide-section-head">
+            <span class="guide-title">${title}</span>
+            <button type="button" class="btn-tiny" data-action="add-images" data-kind="${kind}" data-card="${escapeHtml(c.id)}">+ Add images</button>
+          </div>
+          <div class="value notes" style="font-size:0.88rem;color:var(--text-secondary);white-space:pre-wrap;">${escapeHtml(text || '—')}</div>
+          <div class="guide-gallery">${imgs.map(i => thumbHtml(i, kind, c.id)).join('')}</div>
+        </div>`;
+    }
+
+    function thumbHtml(img, kind, cardId, pendingIdx) {
+      const isPending = pendingIdx !== undefined;
+      const delAttrs = isPending
+        ? `data-action="del-pending" data-kind="${kind}" data-idx="${pendingIdx}"`
+        : `data-action="del-image" data-kind="${kind}" data-card="${escapeHtml(cardId)}" data-file="${escapeHtml(img.file)}"`;
+      const imgAttrs = isPending
+        ? `src="${escapeHtml(img.preview)}"`
+        : `data-file="${escapeHtml(img.file)}"`;
+      return `<div class="thumb ${isPending ? 'pending' : 'loading'}" data-action="open-image" data-kind="${kind}" data-card="${escapeHtml(cardId || '')}" data-file="${escapeHtml(img.file || '')}" data-idx="${isPending ? pendingIdx : ''}" title="${escapeHtml(img.name || '')}">
+        <img ${imgAttrs} alt="${escapeHtml(img.name || '')}">
+        <button type="button" class="thumb-del" ${delAttrs} title="Delete image" aria-label="Delete image">&times;</button>
+      </div>`;
+    }
+
+    // ── Image fetching (needs admin header → blob URLs) ──
+    const blobCache = new Map(); // file -> Promise<blobUrl|null>
+    function getImageBlobUrl(file) {
+      if (!blobCache.has(file)) {
+        blobCache.set(file, fetch(`/api/saas-images/${encodeURIComponent(file)}`, { headers: authHeaders() })
+          .then(r => { if (!r.ok) throw new Error('img'); return r.blob(); })
+          .then(b => URL.createObjectURL(b))
+          .catch(() => { blobCache.delete(file); return null; }));
+      }
+      return blobCache.get(file);
+    }
+    function dropBlob(file) {
+      const p = blobCache.get(file);
+      blobCache.delete(file);
+      if (p) p.then(u => u && URL.revokeObjectURL(u));
+    }
+    function hydrateImages(root = document) {
+      root.querySelectorAll('.thumb img[data-file]').forEach(async (el) => {
+        if (el.getAttribute('src')) return;
+        const url = await getImageBlobUrl(el.dataset.file);
+        if (url) el.src = url;
+        el.closest('.thumb')?.classList.remove('loading');
+      });
+    }
+
+    // ── Client-side downscale ──
+    const MAX_EDGE = 1600;
+    function readAsDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(fr.result);
+        fr.onerror = () => reject(fr.error);
+        fr.readAsDataURL(blob);
+      });
+    }
+    function loadImageEl(blob) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(blob);
+        const im = new Image();
+        im.onload = () => { URL.revokeObjectURL(url); resolve(im); };
+        im.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode')); };
+        im.src = url;
+      });
+    }
+    async function prepareImage(file) {
+      const baseName = (file.name || 'pasted-image').replace(/\.[^.]+$/, '');
+      try {
+        const im = await loadImageEl(file);
+        let w = im.naturalWidth, h = im.naturalHeight;
+        const scale = Math.min(1, MAX_EDGE / Math.max(w, h));
+        w = Math.max(1, Math.round(w * scale));
+        h = Math.max(1, Math.round(h * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(im, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        if (!dataUrl.startsWith('data:image/jpeg')) throw new Error('encode');
+        return { name: baseName + '.jpg', dataUrl };
+      } catch (_) {
+        if (/^image\/(png|webp|gif|jpeg)$/.test(file.type)) {
+          return { name: file.name || 'image', dataUrl: await readAsDataUrl(file) };
+        }
+        throw new Error('Unsupported image: ' + (file.name || 'file'));
+      }
+    }
+
+    // ── Upload / delete ──
+    async function uploadImage(cardId, kind, name, dataUrl) {
+      const res = await fetch(`/api/saas/${encodeURIComponent(cardId)}/images`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ kind, name, dataUrl })
+      });
+      if (res.status === 401) { logout(); throw new Error('Unauthorized'); }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Upload failed.');
+      const i = cards.findIndex(c => c.id === cardId);
+      if (i !== -1) cards[i] = data;
+      return data;
+    }
+
+    async function uploadFiles(cardId, kind, files) {
+      let ok = 0;
+      for (const f of files) {
+        try {
+          const p = await prepareImage(f);
+          await uploadImage(cardId, kind, p.name, p.dataUrl);
+          ok++;
+        } catch (err) {
+          showToast(err.message || 'Upload failed.', 'error');
+        }
+      }
+      return ok;
+    }
+
+    async function deleteImage(cardId, kind, file) {
+      if (!confirm('Delete this image?')) return;
+      const res = await fetch(`/api/saas/${encodeURIComponent(cardId)}/images/${encodeURIComponent(file)}?kind=${kind}`, {
+        method: 'DELETE', headers: authHeaders()
+      });
+      if (res.status === 401) { logout(); return; }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { showToast(data.error || 'Delete failed.', 'error'); return; }
+      dropBlob(file);
+      const i = cards.findIndex(c => c.id === cardId);
+      if (i !== -1) cards[i] = data;
+      renderCards();
+      renderModalGalleries();
+      showToast('Image deleted.');
+    }
+
+    // ── Modal galleries ──
+    let pendingImages = { login: [], bill: [] }; // for a new (unsaved) card
+    function currentModalCard() {
+      const id = document.getElementById('card-id').value;
+      return id ? cards.find(c => c.id === id) : null;
+    }
+    function renderModalGalleries() {
+      const card = currentModalCard();
+      for (const kind of ['login', 'bill']) {
+        const el = document.getElementById('modal-gallery-' + kind);
+        if (card) {
+          const imgs = (kind === 'login' ? card.loginImages : card.billImages) || [];
+          el.innerHTML = imgs.map(i => thumbHtml(i, kind, card.id)).join('');
+        } else {
+          el.innerHTML = pendingImages[kind].map((p, idx) => thumbHtml(p, kind, '', idx)).join('');
+        }
+      }
+      hydrateImages(document.getElementById('saas-modal'));
+    }
+
+    async function addFilesTo(kind, fileList, cardId) {
+      const files = Array.from(fileList || []).filter(f => f.type.startsWith('image/'));
+      if (!files.length) return;
+      if (cardId) {
+        showToast(`Uploading ${files.length} image(s)…`);
+        const n = await uploadFiles(cardId, kind, files);
+        if (n) showToast(`${n} image(s) added.`);
+        renderCards();
+        renderModalGalleries();
+      } else {
+        for (const f of files) {
+          try {
+            const p = await prepareImage(f);
+            pendingImages[kind].push({ name: p.name, dataUrl: p.dataUrl, preview: p.dataUrl });
+          } catch (err) { showToast(err.message, 'error'); }
+        }
+        renderModalGalleries();
+      }
+    }
+
+    // ── Lightbox ──
+    let lb = { items: [], idx: 0 };
+    async function openLightbox(items, idx) {
+      lb = { items, idx };
+      await showLightbox();
+      document.getElementById('img-lightbox').classList.add('active');
+    }
+    async function showLightbox() {
+      const it = lb.items[lb.idx];
+      if (!it) return;
+      const img = document.getElementById('lb-img');
+      img.removeAttribute('src');
+      document.getElementById('lb-cap').textContent = `${it.name || ''} (${lb.idx + 1}/${lb.items.length})`;
+      const src = it.preview || (it.file ? await getImageBlobUrl(it.file) : null);
+      if (src) img.src = src;
+      const multi = lb.items.length > 1;
+      document.querySelector('#img-lightbox .lb-prev').style.display = multi ? '' : 'none';
+      document.querySelector('#img-lightbox .lb-next').style.display = multi ? '' : 'none';
+    }
+    function closeLightbox() { document.getElementById('img-lightbox').classList.remove('active'); }
+    function stepLightbox(d) {
+      lb.idx = (lb.idx + d + lb.items.length) % lb.items.length;
+      showLightbox();
+    }
+    document.getElementById('img-lightbox').addEventListener('click', (e) => {
+      if (e.target.closest('.lb-prev')) return stepLightbox(-1);
+      if (e.target.closest('.lb-next')) return stepLightbox(1);
+      if (e.target.id === 'lb-img') return;
+      closeLightbox();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (!document.getElementById('img-lightbox').classList.contains('active')) return;
+      if (e.key === 'Escape') closeLightbox();
+      else if (e.key === 'ArrowLeft') stepLightbox(-1);
+      else if (e.key === 'ArrowRight') stepLightbox(1);
+    });
+
+    // ── Delegated clicks for gallery actions ──
+    let fileTarget = { kind: 'login', cardId: '' };
+    document.addEventListener('click', (e) => {
+      const el = e.target.closest('[data-action]');
+      if (!el) return;
+      const action = el.dataset.action;
+      const kind = el.dataset.kind;
+      if (action === 'add-images') {
+        // Button in modal has no data-card: use modal card id (may be '' for new card)
+        const cardId = el.dataset.card !== undefined ? el.dataset.card : document.getElementById('card-id').value;
+        fileTarget = { kind, cardId };
+        document.getElementById('img-file-input').click();
+      } else if (action === 'del-image') {
+        e.stopPropagation();
+        deleteImage(el.dataset.card, kind, el.dataset.file);
+      } else if (action === 'del-pending') {
+        e.stopPropagation();
+        if (!confirm('Remove this image?')) return;
+        pendingImages[kind].splice(Number(el.dataset.idx), 1);
+        renderModalGalleries();
+      } else if (action === 'open-image') {
+        if (el.dataset.idx !== '' && el.dataset.idx !== undefined) {
+          openLightbox(pendingImages[kind].map(p => ({ name: p.name, preview: p.preview })), Number(el.dataset.idx));
+        } else {
+          const card = cards.find(c => c.id === el.dataset.card);
+          const imgs = (kind === 'login' ? card?.loginImages : card?.billImages) || [];
+          const idx = Math.max(0, imgs.findIndex(i => i.file === el.dataset.file));
+          openLightbox(imgs, idx);
+        }
+      }
+    });
+    document.getElementById('img-file-input').addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      e.target.value = '';
+      await addFilesTo(fileTarget.kind, files, fileTarget.cardId);
+    });
+
+    // Paste screenshots while the modal is open (goes to the focused section; default: login)
+    document.addEventListener('paste', (e) => {
+      if (!document.getElementById('saas-modal').classList.contains('active')) return;
+      const files = Array.from(e.clipboardData?.files || []).filter(f => f.type.startsWith('image/'));
+      if (!files.length) return;
+      e.preventDefault();
+      const sec = document.activeElement?.closest?.('.guide-section');
+      const kind = sec?.dataset.kind || 'login';
+      addFilesTo(kind, files, document.getElementById('card-id').value);
+    });
 
     function toggleReveal(id) {
       revealMap[id] = !revealMap[id];
@@ -472,6 +858,9 @@
       document.getElementById('field-username').value = card?.username || '';
       document.getElementById('field-credential').value = card?.credential || '';
       document.getElementById('field-guide').value = card?.accessGuide || '';
+      document.getElementById('field-bill-guide').value = card?.billGuide || '';
+      pendingImages = { login: [], bill: [] };
+      renderModalGalleries();
       document.getElementById('saas-modal').classList.add('active');
       document.getElementById('field-name').focus();
     }
@@ -488,7 +877,7 @@
     async function deleteCard(id) {
       const card = cards.find(c => c.id === id);
       if (!card) return;
-      if (!confirm(`Delete “${card.name}”?`)) return;
+      if (!confirm(`Delete “${card.name}” and its guide images?`)) return;
       const res = await fetch(`/api/saas/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: authHeaders()
@@ -499,6 +888,7 @@
         showToast(data.error || 'Delete failed.', 'error');
         return;
       }
+      [...(card.loginImages || []), ...(card.billImages || [])].forEach(i => dropBlob(i.file));
       showToast('Card deleted.');
       await loadCards();
     }
@@ -520,7 +910,8 @@
         description: document.getElementById('field-description').value,
         username: document.getElementById('field-username').value,
         credential: document.getElementById('field-credential').value,
-        accessGuide: document.getElementById('field-guide').value
+        accessGuide: document.getElementById('field-guide').value,
+        billGuide: document.getElementById('field-bill-guide').value
       };
       const res = await fetch(id ? `/api/saas/${encodeURIComponent(id)}` : '/api/saas', {
         method: id ? 'PUT' : 'POST',
@@ -533,6 +924,21 @@
         showToast(data.error || 'Save failed.', 'error');
         return;
       }
+      const savedId = data.id || id;
+      const queued = id ? { login: [], bill: [] } : pendingImages;
+      const total = queued.login.length + queued.bill.length;
+      if (total) {
+        showToast(`Card saved. Uploading ${total} image(s)…`);
+        let failed = 0;
+        for (const kind of ['login', 'bill']) {
+          for (const p of queued[kind]) {
+            try { await uploadImage(savedId, kind, p.name, p.dataUrl); }
+            catch (err) { failed++; showToast(err.message || 'Upload failed.', 'error'); }
+          }
+        }
+        if (failed) showToast(`${failed} image(s) failed — re-open the card to add them again.`, 'error');
+      }
+      pendingImages = { login: [], bill: [] };
       closeModal();
       showToast(id ? 'Card updated.' : 'Card added.');
       await loadCards();
@@ -553,14 +959,41 @@
       } catch (_) {}
     }
 
-    document.getElementById('export-cards-btn').addEventListener('click', () => {
-      const blob = new Blob([JSON.stringify(cards, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `saas-cards-${new Date().toISOString().slice(0,10)}.json`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-      showToast('Exported cards.');
+    async function imageToDataUrl(file) {
+      const res = await fetch(`/api/saas-images/${encodeURIComponent(file)}`, { headers: authHeaders() });
+      if (!res.ok) throw new Error('image fetch failed');
+      return readAsDataUrl(await res.blob());
+    }
+
+    document.getElementById('export-cards-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('export-cards-btn');
+      btn.disabled = true;
+      try {
+        const out = [];
+        let missing = 0;
+        for (const c of cards) {
+          const copy = { ...c };
+          for (const field of ['loginImages', 'billImages']) {
+            copy[field] = [];
+            for (const img of (c[field] || [])) {
+              try { copy[field].push({ file: img.file, name: img.name, dataUrl: await imageToDataUrl(img.file) }); }
+              catch (_) { missing++; }
+            }
+          }
+          out.push(copy);
+        }
+        const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `saas-cards-${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        showToast(missing ? `Exported (${missing} image(s) could not be read).` : 'Exported cards with images.', missing ? 'error' : 'success');
+      } catch (err) {
+        showToast('Export failed.', 'error');
+      } finally {
+        btn.disabled = false;
+      }
     });
 
     document.getElementById('import-cards-btn').addEventListener('click', () => {
@@ -571,11 +1004,17 @@
       const file = e.target.files?.[0];
       e.target.value = '';
       if (!file) return;
+      let list;
       try {
         const parsed = JSON.parse(await file.text());
-        const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.cards) ? parsed.cards : null);
-        if (!list) { showToast('Invalid backup file.', 'error'); return; }
-        if (!confirm(`Import ${list.length} card(s)? Existing cards with the same id are updated; new ids are added.`)) return;
+        list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.cards) ? parsed.cards : null);
+      } catch (err) {
+        showToast('Could not read backup file.', 'error');
+        return;
+      }
+      if (!list) { showToast('Invalid backup file.', 'error'); return; }
+      if (!confirm(`Import ${list.length} card(s) (with images)? Existing cards with the same id are updated; new ids are added.`)) return;
+      try {
         for (const item of list) {
           const payload = {
             name: item.name || '',
@@ -583,35 +1022,45 @@
             description: item.description || '',
             username: item.username || '',
             credential: item.credential || '',
-            accessGuide: item.accessGuide || ''
+            accessGuide: item.accessGuide || '',
+            billGuide: item.billGuide || ''
           };
-          const existing = item.id && cards.some(c => c.id === item.id);
-          const res = await fetch(existing ? `/api/saas/${encodeURIComponent(item.id)}` : '/api/saas', {
-            method: existing ? 'PUT' : 'POST',
+          const existingCard = item.id ? cards.find(c => c.id === item.id) : null;
+          let res = await fetch(existingCard ? `/api/saas/${encodeURIComponent(item.id)}` : '/api/saas', {
+            method: existingCard ? 'PUT' : 'POST',
             headers: authHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify(existing ? payload : payload)
+            body: JSON.stringify(payload)
           });
-          // For PUT we need to preserve id via URL; for create server assigns id.
-          // If item has id but not on server, POST creates new id — accept that.
-          if (res.status === 404 && existing) {
-            // fall through create without forcing id
-            await fetch('/api/saas', {
+          let existingFiles = new Set([...(existingCard?.loginImages || []), ...(existingCard?.billImages || [])].map(i => i.file));
+          if (res.status === 404 && existingCard) {
+            existingFiles = new Set();
+            res = await fetch('/api/saas', {
               method: 'POST',
               headers: authHeaders({ 'Content-Type': 'application/json' }),
               body: JSON.stringify(payload)
             });
-          } else if (!res.ok && res.status !== 404) {
-            const data = await res.json().catch(() => ({}));
-            showToast(data.error || 'Import failed on one card.', 'error');
+          }
+          if (res.status === 401) { logout(); return; }
+          const saved = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            showToast(saved.error || 'Import failed on one card.', 'error');
             await loadCards();
             return;
           }
+          for (const [field, kind] of [['loginImages', 'login'], ['billImages', 'bill']]) {
+            for (const img of (Array.isArray(item[field]) ? item[field] : [])) {
+              if (!img || typeof img.dataUrl !== 'string') continue;
+              if (img.file && existingFiles.has(img.file)) continue; // already on server
+              try { await uploadImage(saved.id, kind, img.name || 'image', img.dataUrl); }
+              catch (err) { showToast(`Image skipped: ${err.message}`, 'error'); }
+            }
+          }
         }
         showToast('Import finished.');
-        await loadCards();
       } catch (err) {
-        showToast('Could not read backup file.', 'error');
+        showToast('Import failed.', 'error');
       }
+      await loadCards();
     });
 
     document.getElementById('saas-login-form').addEventListener('submit', async (e) => {

@@ -33,6 +33,7 @@ const storageFile  = path.join(storageDir, 'vault.json');
 const slotsFile    = path.join(storageDir, 'slots.json');
 const accountsFile = path.join(storageDir, 'accounts_meta.json'); // stores email+password per accountId
 const saasFile     = path.join(storageDir, 'saas.json');         // SaaS subscription cards
+const saasImagesDir = path.join(storageDir, 'saas-images');      // SaaS guide images (persistent volume)
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const ADMIN_PASSWORD  = process.env.ADMIN_PASSWORD;
@@ -62,7 +63,16 @@ const readSlots        = () => readJSON(slotsFile, {});
 const writeSlots       = (d) => writeJSON(slotsFile, d);
 const readAccountsMeta = () => readJSON(accountsFile, {});
 const writeAccountsMeta= (d) => writeJSON(accountsFile, d);
-const readSaas          = () => readJSON(saasFile, []);
+const withImageDefaults = (c) => ({
+  ...c,
+  loginImages: Array.isArray(c.loginImages) ? c.loginImages : [],
+  billImages:  Array.isArray(c.billImages)  ? c.billImages  : [],
+  billGuide:   typeof c.billGuide === 'string' ? c.billGuide : ''
+});
+const readSaas          = () => {
+  const list = readJSON(saasFile, []);
+  return Array.isArray(list) ? list.map(withImageDefaults) : list;
+};
 const writeSaas         = (d) => writeJSON(saasFile, d);
 
 function normalizeSaasCard(body, existing = null) {
@@ -76,6 +86,10 @@ function normalizeSaasCard(body, existing = null) {
     username: (body.username || '').trim(),
     credential: (body.credential || '').trim(),
     accessGuide: (body.accessGuide || '').trim(),
+    billGuide: (body.billGuide || '').trim(),
+    // Images are managed only via the /images endpoints; edits never wipe them.
+    loginImages: Array.isArray(existing?.loginImages) ? existing.loginImages : [],
+    billImages: Array.isArray(existing?.billImages) ? existing.billImages : [],
     createdAt: existing?.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
@@ -195,8 +209,55 @@ function sendWhatsApp(to, text) {
   });
 }
 
+// ─── SaaS image helpers ──────────────────────────────────────────────────────
+const IMAGE_MIME_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' };
+const IMAGE_EXT_MIME = { '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' };
+const IMAGE_FILE_RE  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp|gif)$/;
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+function sniffImageMime(buf) {
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+  if (buf.length >= 8 && buf.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (buf.length >= 6 && /^GIF8[79]a$/.test(buf.slice(0, 6).toString('latin1'))) return 'image/gif';
+  if (buf.length >= 12 && buf.slice(0, 4).toString('latin1') === 'RIFF' && buf.slice(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
+  return null;
+}
+
+// Returns { buffer, mime, ext } or { error, status }
+function parseImageDataUrl(dataUrl) {
+  if (typeof dataUrl !== 'string') return { error: 'dataUrl is required.', status: 400 };
+  const m = /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=\s]+)$/.exec(dataUrl);
+  if (!m) return { error: 'Only jpg, png, webp or gif data URLs are allowed.', status: 400 };
+  const buffer = Buffer.from(m[2], 'base64');
+  if (!buffer.length) return { error: 'Empty image.', status: 400 };
+  if (buffer.length > MAX_IMAGE_BYTES) return { error: 'Image too large (max 8MB).', status: 413 };
+  if (sniffImageMime(buffer) !== m[1]) return { error: 'Image content does not match its type.', status: 400 };
+  return { buffer, mime: m[1], ext: IMAGE_MIME_EXT[m[1]] };
+}
+
+function removeImageFile(file) {
+  if (typeof file !== 'string' || !IMAGE_FILE_RE.test(file)) return;
+  try { fs.unlinkSync(path.join(saasImagesDir, file)); } catch (_) { /* already gone */ }
+}
+
+function cleanImageName(name, fallback) {
+  const n = String(name || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 120);
+  return n || fallback;
+}
+
 // ─── Middleware ───────────────────────────────────────────────────────────────
-app.use(express.json());
+// Only the image-upload route gets the larger JSON limit (8MB image ≈ 10.7MB base64).
+// Auth is checked before the big body is parsed.
+const jsonDefault = express.json();
+const jsonUpload  = express.json({ limit: '12mb' });
+app.use((req, res, next) => {
+  if (req.method === 'POST' && /^\/api\/saas\/[^/]+\/images\/?$/.test(req.path)) {
+    if (req.headers['x-admin-password'] !== ADMIN_PASSWORD)
+      return res.status(401).json({ error: 'Unauthorized.' });
+    return jsonUpload(req, res, next);
+  }
+  return jsonDefault(req, res, next);
+});
 app.use(express.static(__dirname));
 
 // ─── Admin middleware ─────────────────────────────────────────────────────────
@@ -439,10 +500,67 @@ app.put('/api/saas/:id', requireAdmin, (req, res) => {
 
 app.delete('/api/saas/:id', requireAdmin, (req, res) => {
   const list = readSaas();
+  const removed = list.find(c => c.id === req.params.id);
   const next = list.filter(c => c.id !== req.params.id);
   if (next.length === list.length) return res.status(404).json({ error: 'Card not found.' });
   writeSaas(next);
+  for (const img of [...(removed.loginImages || []), ...(removed.billImages || [])]) removeImageFile(img && img.file);
   return res.json({ success: true });
+});
+
+// POST /api/saas/:id/images  { kind: 'login'|'bill', name, dataUrl }
+app.post('/api/saas/:id/images', requireAdmin, (req, res) => {
+  const { kind, name, dataUrl } = req.body || {};
+  if (kind !== 'login' && kind !== 'bill')
+    return res.status(400).json({ error: "kind must be 'login' or 'bill'." });
+  const list = readSaas();
+  const idx = list.findIndex(c => c.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Card not found.' });
+  const img = parseImageDataUrl(dataUrl);
+  if (img.error) return res.status(img.status).json({ error: img.error });
+
+  const file = crypto.randomUUID() + img.ext;
+  try {
+    fs.mkdirSync(saasImagesDir, { recursive: true });
+    fs.writeFileSync(path.join(saasImagesDir, file), img.buffer);
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to store image.' });
+  }
+  const field = kind === 'login' ? 'loginImages' : 'billImages';
+  list[idx][field].push({ file, name: cleanImageName(name, file) });
+  list[idx].updatedAt = new Date().toISOString();
+  writeSaas(list);
+  return res.json(list[idx]);
+});
+
+// DELETE /api/saas/:id/images/:file?kind=login|bill
+app.delete('/api/saas/:id/images/:file', requireAdmin, (req, res) => {
+  const kind = req.query.kind;
+  if (kind !== 'login' && kind !== 'bill')
+    return res.status(400).json({ error: "kind must be 'login' or 'bill'." });
+  const list = readSaas();
+  const idx = list.findIndex(c => c.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Card not found.' });
+  const field = kind === 'login' ? 'loginImages' : 'billImages';
+  const before = list[idx][field].length;
+  list[idx][field] = list[idx][field].filter(i => i.file !== req.params.file);
+  if (list[idx][field].length === before) return res.status(404).json({ error: 'Image not found.' });
+  list[idx].updatedAt = new Date().toISOString();
+  writeSaas(list);
+  removeImageFile(req.params.file);
+  return res.json(list[idx]);
+});
+
+// GET /api/saas-images/:file  (admin header required)
+app.get('/api/saas-images/:file', requireAdmin, (req, res) => {
+  const file = req.params.file;
+  if (!IMAGE_FILE_RE.test(file)) return res.status(400).json({ error: 'Invalid file name.' });
+  const full = path.join(saasImagesDir, file);
+  if (!fs.existsSync(full)) return res.status(404).json({ error: 'Image not found.' });
+  res.setHeader('Content-Type', IMAGE_EXT_MIME[path.extname(file)]);
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  return fs.createReadStream(full).on('error', () => res.destroy()).pipe(res);
 });
 
 // ─── Page routes ─────────────────────────────────────────────────────────────
@@ -456,6 +574,13 @@ app.get('/learn', (req, res) => {
 
 app.get('/saas', (req, res) => {
   res.sendFile(path.join(__dirname, 'saas.html'));
+});
+
+// Body-parser errors (e.g. oversize upload) → JSON instead of an HTML stack trace
+app.use((err, req, res, next) => {
+  if (err && err.type === 'entity.too.large') return res.status(413).json({ error: 'Payload too large.' });
+  if (err && err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Invalid JSON.' });
+  return next(err);
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
