@@ -81,6 +81,43 @@ function normalizeSaasCard(body, existing = null) {
   };
 }
 
+// ─── Health check (public) ───────────────────────────────────────────────────
+app.get('/health', (req, res) => {
+  let writable = false;
+  let saasReadable = false;
+  let saasCount = 0;
+  let error = null;
+  try {
+    const probe = path.join(storageDir, '.healthwrite');
+    fs.writeFileSync(probe, String(Date.now()), 'utf8');
+    fs.unlinkSync(probe);
+    writable = true;
+  } catch (e) {
+    error = e.message;
+  }
+  try {
+    const list = readSaas();
+    saasReadable = true;
+    saasCount = Array.isArray(list) ? list.length : 0;
+  } catch (e) {
+    error = error || e.message;
+  }
+  const ready = Boolean(writable && !storageIsEphemeral);
+  const body = {
+    status: ready ? 'ok' : 'degraded',
+    ready,
+    ephemeral: storageIsEphemeral,
+    storageDir,
+    writable,
+    saasReadable,
+    saasCount,
+    uptimeSec: Math.round(process.uptime()),
+    ...(error ? { error } : {})
+  };
+  return res.status(ready ? 200 : 503).json(body);
+});
+
+
 
 // ─── Vault decryption (mirrors Web Crypto logic in app.js) ───────────────────
 // Layout: 16 bytes salt | 12 bytes IV | ciphertext (AES-256-GCM)
