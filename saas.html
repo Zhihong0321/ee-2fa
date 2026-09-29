@@ -256,13 +256,20 @@
           <input type="search" id="saas-search" class="form-input" placeholder="Search SaaS cards…"
             style="padding-left:2.5rem;">
         </div>
-        <button class="btn btn-primary" id="add-card-btn">
-          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
-          </svg>
-          Add Card
-        </button>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+          <button class="btn" type="button" id="export-cards-btn" title="Download JSON backup">Export</button>
+          <button class="btn" type="button" id="import-cards-btn" title="Restore from JSON backup">Import</button>
+          <input type="file" id="import-file" accept="application/json,.json" style="display:none;">
+          <button class="btn btn-primary" id="add-card-btn">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+            </svg>
+            Add Card
+          </button>
+        </div>
       </div>
+
+      <div id="storage-warning" style="display:none;padding:0.85rem 1.1rem;border-radius:14px;border:1px solid rgba(249,115,22,0.35);background:rgba(249,115,22,0.08);color:#fdba74;font-size:0.88rem;line-height:1.45;"></div>
 
       <div class="saas-grid" id="saas-grid"></div>
     </div>
@@ -363,6 +370,7 @@
       cards = await res.json();
       showPanel();
       renderCards();
+      await refreshStorageStatus();
       return true;
     }
 
@@ -528,6 +536,82 @@
       closeModal();
       showToast(id ? 'Card updated.' : 'Card added.');
       await loadCards();
+    });
+
+    async function refreshStorageStatus() {
+      try {
+        const res = await fetch('/api/storage-status', { headers: authHeaders() });
+        if (!res.ok) return;
+        const st = await res.json();
+        const box = document.getElementById('storage-warning');
+        if (st.ephemeral) {
+          box.style.display = 'block';
+          box.textContent = '⚠ Storage is ephemeral on this deploy — cards will disappear after redeploy. On Railway: add a Volume mounted at /storage and set STORAGE_DIR=/storage, then re-add or Import your cards.';
+        } else {
+          box.style.display = 'none';
+        }
+      } catch (_) {}
+    }
+
+    document.getElementById('export-cards-btn').addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify(cards, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `saas-cards-${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      showToast('Exported cards.');
+    });
+
+    document.getElementById('import-cards-btn').addEventListener('click', () => {
+      document.getElementById('import-file').click();
+    });
+
+    document.getElementById('import-file').addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      try {
+        const parsed = JSON.parse(await file.text());
+        const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.cards) ? parsed.cards : null);
+        if (!list) { showToast('Invalid backup file.', 'error'); return; }
+        if (!confirm(`Import ${list.length} card(s)? Existing cards with the same id are updated; new ids are added.`)) return;
+        for (const item of list) {
+          const payload = {
+            name: item.name || '',
+            url: item.url || '',
+            description: item.description || '',
+            username: item.username || '',
+            credential: item.credential || '',
+            accessGuide: item.accessGuide || ''
+          };
+          const existing = item.id && cards.some(c => c.id === item.id);
+          const res = await fetch(existing ? `/api/saas/${encodeURIComponent(item.id)}` : '/api/saas', {
+            method: existing ? 'PUT' : 'POST',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(existing ? payload : payload)
+          });
+          // For PUT we need to preserve id via URL; for create server assigns id.
+          // If item has id but not on server, POST creates new id — accept that.
+          if (res.status === 404 && existing) {
+            // fall through create without forcing id
+            await fetch('/api/saas', {
+              method: 'POST',
+              headers: authHeaders({ 'Content-Type': 'application/json' }),
+              body: JSON.stringify(payload)
+            });
+          } else if (!res.ok && res.status !== 404) {
+            const data = await res.json().catch(() => ({}));
+            showToast(data.error || 'Import failed on one card.', 'error');
+            await loadCards();
+            return;
+          }
+        }
+        showToast('Import finished.');
+        await loadCards();
+      } catch (err) {
+        showToast('Could not read backup file.', 'error');
+      }
     });
 
     document.getElementById('saas-login-form').addEventListener('submit', async (e) => {

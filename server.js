@@ -8,13 +8,22 @@ const app  = express();
 const PORT = process.env.PORT || 8000;
 
 // ─── Storage paths ────────────────────────────────────────────────────────────
-let storageDir;
-
-if (fs.existsSync('/storage') || process.env.STORAGE_PATH) {
-  storageDir = path.dirname(process.env.STORAGE_PATH || '/storage/vault.json');
-} else {
-  storageDir = path.join(__dirname, 'storage');
+// Prefer a Railway volume (or STORAGE_DIR / STORAGE_PATH). App-local ./storage is
+// wiped on every redeploy — that is why SaaS cards can disappear after deploy.
+function resolveStorageDir() {
+  if (process.env.STORAGE_DIR) return process.env.STORAGE_DIR;
+  if (process.env.STORAGE_PATH) return path.dirname(process.env.STORAGE_PATH);
+  if (process.env.RAILWAY_VOLUME_MOUNT_PATH) return process.env.RAILWAY_VOLUME_MOUNT_PATH;
+  for (const candidate of ['/storage', '/data']) {
+    try {
+      if (fs.existsSync(candidate)) return candidate;
+    } catch (_) { /* ignore */ }
+  }
+  return path.join(__dirname, 'storage');
 }
+
+const storageDir = resolveStorageDir();
+const storageIsEphemeral = path.resolve(storageDir).startsWith(path.resolve(__dirname));
 
 if (!fs.existsSync(storageDir)) {
   fs.mkdirSync(storageDir, { recursive: true });
@@ -23,7 +32,7 @@ if (!fs.existsSync(storageDir)) {
 const storageFile  = path.join(storageDir, 'vault.json');
 const slotsFile    = path.join(storageDir, 'slots.json');
 const accountsFile = path.join(storageDir, 'accounts_meta.json'); // stores email+password per accountId
-const saasFile      = path.join(storageDir, 'saas.json');         // SaaS subscription cards
+const saasFile     = path.join(storageDir, 'saas.json');         // SaaS subscription cards
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const ADMIN_PASSWORD  = process.env.ADMIN_PASSWORD;
@@ -42,7 +51,11 @@ function readJSON(file, fallback = {}) {
 }
 
 function writeJSON(file, data) {
-  fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
+  const dir = path.dirname(file);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
+  fs.renameSync(tmp, file);
 }
 
 const readSlots        = () => readJSON(slotsFile, {});
@@ -337,6 +350,26 @@ app.delete('/api/admin/slots/clear/:accountId', requireAdmin, (req, res) => {
 });
 
 
+// ─── Storage status (admin only) ─────────────────────────────────────────────
+app.get('/api/storage-status', requireAdmin, (req, res) => {
+  let saasCount = 0;
+  try {
+    const list = readSaas();
+    saasCount = Array.isArray(list) ? list.length : 0;
+  } catch (_) {}
+  return res.json({
+    storageDir,
+    ephemeral: storageIsEphemeral,
+    saasFile,
+    saasCount,
+    vaultExists: fs.existsSync(storageFile),
+    saasExists: fs.existsSync(saasFile),
+    hint: storageIsEphemeral
+      ? 'Storage is inside the app image and is wiped on redeploy. On Railway: add a Volume, mount it (e.g. /storage), and set STORAGE_DIR=/storage (or STORAGE_PATH=/storage/vault.json).'
+      : 'Storage is on a mounted/persistent path.'
+  });
+});
+
 // ─── SaaS subscription cards API (admin only) ────────────────────────────────
 
 app.get('/api/saas', requireAdmin, (req, res) => {
@@ -387,8 +420,13 @@ app.get('/saas', (req, res) => {
 // ─── Start ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`Eternalgy Digital Asset Server running on port ${PORT}`);
+  console.log(`Storage dir:   ${storageDir}${storageIsEphemeral ? '  ⚠ EPHEMERAL (wiped on redeploy)' : '  ✓ persistent path'}`);
   console.log(`Vault:         ${storageFile}`);
   console.log(`Slots:         ${slotsFile}`);
   console.log(`Accounts meta: ${accountsFile}`);
   console.log(`SaaS cards:    ${saasFile}`);
+  if (storageIsEphemeral) {
+    console.warn('WARNING: No persistent volume detected. SaaS cards, slots, and vault files will be lost on redeploy.');
+    console.warn('Set STORAGE_DIR to your Railway volume mount path (example: /storage).');
+  }
 });
