@@ -285,6 +285,32 @@
       position: absolute; bottom: 1rem; left: 0; right: 0;
       text-align: center; color: var(--text-secondary); font-size: 0.8rem;
     }
+    /* Add/Edit modal: header + footer stay put, only the form scrolls */
+    #saas-modal .modal-content {
+      display: flex;
+      flex-direction: column;
+      max-height: calc(100vh - 2rem);
+      max-height: calc(100dvh - 2rem);
+    }
+    #saas-modal .modal-header { flex-shrink: 0; }
+    #saas-modal #saas-form {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding-bottom: 0;
+      gap: 1.25rem;
+    }
+    #saas-modal #saas-form > * { flex-shrink: 0; }
+    #saas-modal #saas-form .modal-footer {
+      position: sticky;
+      bottom: 0;
+      z-index: 5;
+      margin: 0.5rem -2rem 0 !important;
+      padding: 1rem 2rem !important;
+      background: #11141e;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
   </style>
 </head>
 <body>
