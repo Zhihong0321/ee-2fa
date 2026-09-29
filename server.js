@@ -253,14 +253,14 @@ app.post('/api/slots/claim', async (req, res) => {
 
   // Send WhatsApp message
   const message =
-    `✅ *Eternalgy AI Kindergarten — Slot Claimed*\n\n` +
+    `✅ *Eternalgy Digital Asset — Slot Claimed*\n\n` +
     `You have successfully claimed access to a Google account.\n\n` +
     `📧 *Email:* ${info.loginEmail}\n` +
     `🔑 *Password:* ${info.loginPassword}\n\n` +
     `📱 *How to use:*\n` +
     `1. Download *Gemini* app on your phone\n` +
     `2. Sign in with the email & password above\n` +
-    `3. When asked for 2FA, use the OTP code from the Eternalgy AI Kindergarten vault\n\n` +
+    `3. When asked for 2FA, use the OTP code from the Eternalgy Digital Asset vault\n\n` +
     `⚠️ Do not share this message. Your number is registered to this slot.`;
 
   try {
@@ -386,7 +386,7 @@ app.get('/saas', (req, res) => {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`Eternalgy AI Kindergarten Server running on port ${PORT}`);
+  console.log(`Eternalgy Digital Asset Server running on port ${PORT}`);
   console.log(`Vault:         ${storageFile}`);
   console.log(`Slots:         ${slotsFile}`);
   console.log(`Accounts meta: ${accountsFile}`);
